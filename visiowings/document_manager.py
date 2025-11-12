@@ -87,15 +87,47 @@ class VisioDocumentManager:
             
             # Find main document
             main_doc_found = False
+            main_file_name = self.main_file_path.name.lower()
+            
+            # Debug: Show all open documents
+            if self.debug:
+                print(f"[DEBUG] Looking for: {str(self.main_file_path)}")
+                print(f"[DEBUG] Filename: {main_file_name}")
+                print(f"[DEBUG] Open documents in Visio:")
+            
             for doc in self.visio_app.Documents:
-                if doc.FullName.lower() == str(self.main_file_path).lower():
+                doc_full_path = doc.FullName.lower()
+                doc_name = Path(doc_full_path).name.lower()
+                
+                if self.debug:
+                    print(f"[DEBUG]   - {doc.Name}")
+                    print(f"[DEBUG]     Path: {doc_full_path}")
+                
+                # Strategy 1: Exact path match
+                if doc_full_path == str(self.main_file_path).lower():
                     self.main_doc = doc
                     main_doc_found = True
+                    if self.debug:
+                        print(f"[DEBUG]     ✓ MATCHED (exact path)")
+                    break
+                
+                # Strategy 2: Filename match (for OneDrive, SharePoint, etc.)
+                if doc_name == main_file_name:
+                    self.main_doc = doc
+                    main_doc_found = True
+                    if self.debug:
+                        print(f"[DEBUG]     ✓ MATCHED (by filename)")
+                        print(f"[DEBUG]     Note: Using filename match because paths differ")
+                        print(f"[DEBUG]     Expected: {str(self.main_file_path)}")
+                        print(f"[DEBUG]     Actual:   {doc_full_path}")
                     break
             
             if not main_doc_found:
-                print(f"⚠️  Main document not open: {self.main_file_path}")
-                print("   Please open the document in Visio.")
+                print(f"⚠️  Document not found: {self.main_file_path.name}")
+                print("\n   Open documents in Visio:")
+                for doc in self.visio_app.Documents:
+                    print(f"     - {doc.Name}")
+                print("\n   Tip: Make sure the document is open in Visio")
                 return False
             
             # Discover all open documents
