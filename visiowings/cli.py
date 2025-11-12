@@ -126,7 +126,7 @@ def main():
     # Edit command
     edit_parser = subparsers.add_parser(
         'edit', 
-        help='Edit VBA modules with live sync (VS Code ↔ Visio)'
+        help='Edit VBA modules with live sync (VS Code <-> Visio)'
     )
     edit_parser.add_argument('--file', '-f', required=True, help='Visio file (.vsdm, .vsdx, .vstm, .vstx)')
     edit_parser.add_argument('--output', '-o', help='Export directory (default: current directory)')
