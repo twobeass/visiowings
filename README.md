@@ -1,8 +1,19 @@
 # visiowings
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+
 > VBA Editor for Microsoft Visio with VS Code integration - inspired by xlwings
 
 🚀 Edit your Visio VBA code in VS Code (or any editor you like) with **live synchronization** back to Visio!
+
+## Table of Contents
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
 
 ## Features
 
@@ -23,7 +34,7 @@
 
 ### Example Structure
 
-```
+```text
 my_project/
 ├── drawing.vsdx
 ├── mystencil.vssm
@@ -45,7 +56,7 @@ my_project/
 
 1. Open all relevant Visio documents (drawings, stencils, templates).
 2. Run:
-   ```
+   ```bash
    visiowings edit --file your_main_document.vsdx --bidirectional --force
    ```
 3. Edit your VBA files in VS Code. Changes always sync back to their matching Visio document.
@@ -59,7 +70,7 @@ my_project/
 
 The Visio VBA editor lacks modern features that developers expect. **visiowings** brings the power of VS Code to Visio development:
 
-```bash
+```text
 # Instead of this painful workflow:
 Visio VBA Editor -> No line numbers -> Limited editing -> Manual version control
 
@@ -74,6 +85,12 @@ VS Code -> Full editor features -> Live sync to Visio -> Automatic Git tracking
 - **Windows** (required for COM automation)
 - **Python 3.8+**
 - **Microsoft Visio** (any version with VBA support)
+
+### Install from PyPI (recommended)
+
+```bash
+pip install visiowings
+```
 
 ### Install from GitHub
 
@@ -91,39 +108,19 @@ pip install -e .
 
 ## Quick Start
 
-### 1. Enable VBA Project Access in Visio
+1. **Enable VBA access**: Visio → File → Options → Trust Center → Trust Center Settings → Macro Settings → ☑ "Trust access to the VBA project object model"
 
-⚠️ **Important**: Before using visiowings, you must enable VBA project access:
+2. **Install**: `pip install visiowings`
 
-1. Open Visio
-2. **File** -> **Options** -> **Trust Center** -> **Trust Center Settings**
-3. **Macro Settings** -> ☑ "Trust access to the VBA project object model"
+3. **Open your Visio file** (saved as `.vsdm`)
 
-### 2. Open your Visio file
+4. **Start syncing**:
+   ```bash
+   visiowings edit --file "document.vsdm" --bidirectional
+   code .
+   ```
 
-Make sure your Visio file is:
-- Saved as `.vsdm` (macro-enabled format)
-- Currently open in Visio
-
-### 3. Start editing with live sync
-
-```bash
-cd /path/to/your/project
-visiowings edit --file "C:/path/to/your/document.vsdm"
-```
-
-This will:
-1. Export all VBA modules to the current directory
-2. Start watching for file changes
-3. Auto-sync any changes back to Visio
-
-### 4. Edit in VS Code
-
-```bash
-code .  # Open VS Code in current directory
-```
-
-Now edit your `.bas`, `.cls`, or `.frm` files. Every time you save (Ctrl+S), the changes are **instantly synchronized** to Visio!
+Done! Edit in VS Code, save with Ctrl+S, and changes sync instantly to Visio.
 
 ## Usage
 
@@ -250,18 +247,6 @@ visiowings uses MD5 hash-based change detection to prevent unnecessary exports:
 - Pauses file watcher during export operations
 - Efficient polling without constant file writes
 
-```bash
-# With debug mode, you can see the hash comparison:
-visiowings edit --file document.vsdm --bidirectional --debug
-
-# Output:
-# [DEBUG] Hash berechnet: 882c423e... (3 Module)
-# [DEBUG] Last hash: 882c423e...
-# [DEBUG] Current hash: 882c423e...
-# [DEBUG] Hashes identisch - kein Export
-# [DEBUG] Keine Änderungen in Visio erkannt, kein Export.
-```
-
 ## Git Integration
 
 One of the **biggest benefits** is real-time Git integration:
@@ -287,10 +272,9 @@ git commit -m "Initial VBA modules"
 
 For the best experience, install these VS Code extensions:
 
-1. **VBA** (Wine-HQ or similar)
+1. **VBA syntax**
    - Provides syntax highlighting for `.bas`, `.cls`, `.frm` files
    - Search in VS Code: `@ext:vba`
-
 2. **GitLens**
    - Enhanced Git integration
    - Inline blame and history
@@ -346,15 +330,8 @@ Make sure:
 
 This should not happen with the latest version, but if it does:
 
-1. Use `--debug` flag to see what's triggering exports:
-   ```bash
-   visiowings edit --file document.vsdm --bidirectional --debug
-   ```
-
-2. Check the hash values in debug output:
-   - If hashes are identical but export still happens, please report an issue
-   - If hashes change unexpectedly, check if something else is modifying VBA
-
+1. Use `--debug` flag to see what's triggering exports
+2. Check the hash values in debug output
 3. The file watcher is paused during exports to prevent triggering itself
 
 ### Document Module (ThisDocument.cls) not updating
@@ -365,13 +342,9 @@ Document modules require the `--force` flag:
 visiowings edit --file document.vsdm --force
 ```
 
-Without `--force`, Document modules are skipped with a warning.
-
-
 ## Roadmap
 
 - [ ] Add Python <-> Visio integration (like xlwings `RunPython`)
-- [ ] Support for Visio templates (`.vstm`)
 - [ ] Configurable polling interval
 - [ ] Standalone executable (no Python required)
 - [ ] GUI version
