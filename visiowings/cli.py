@@ -48,7 +48,7 @@ def cmd_edit(args):
             print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
     
     print("\n=== Starte Live-Synchronisation ===")
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug)
+    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, silent_reconnect=True)
     if not importer.connect_to_visio():
         return
     
