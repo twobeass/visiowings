@@ -3,6 +3,7 @@ Adds smart polling for VSCode ← Visio sync (detects document changes).
 Fix: COM threading (CoInitialize) in poll thread.
 Fix: Hash-based change detection to prevent endless loops.
 Fix: Pause observer during export to prevent file watcher triggers.
+Supports multiple documents (drawings + stencils).
 """
 import time
 import threading
@@ -42,7 +43,13 @@ class VBAFileHandler(FileSystemEventHandler):
         
         self.last_modified[str(file_path)] = current_time
         
-        print(f"\n📝 Änderung erkannt: {file_path.name}")
+        # Show relative path for better clarity in multi-document mode
+        try:
+            rel_path = file_path.relative_to(self.watcher.watch_directory)
+            print(f"\n📝 Änderung erkannt: {rel_path}")
+        except ValueError:
+            print(f"\n📝 Änderung erkannt: {file_path.name}")
+        
         self.importer.import_module(file_path)
 
 class VBAWatcher:
@@ -55,7 +62,7 @@ class VBAWatcher:
         self.observer = None
         self.smart_poll_timer = None
         self.last_vba_sync_time = 0
-        self.last_export_hash = None  # Track hash between polling cycles
+        self.last_export_hashes = {}  # Track hash per document: {doc_folder: hash}
         self.is_exporting = False  # Flag to prevent concurrent operations
         self.doc = importer.doc
     
@@ -78,7 +85,7 @@ class VBAWatcher:
             self.observer.schedule(
                 event_handler,
                 str(self.watch_directory),
-                recursive=False
+                recursive=True  # Watch subdirectories for multi-document support
             )
             self.observer.start()
     
@@ -130,27 +137,28 @@ class VBAWatcher:
                     
                     # Connect silently (document is already open, no need for verbose messages)
                     if thread_exporter.connect_to_visio(silent=True):
-                        # Export with hash comparison
-                        result = thread_exporter.export_modules(
+                        # Export with hash comparison (now returns dicts for multi-document)
+                        all_exported, all_hashes = thread_exporter.export_modules(
                             self.watch_directory, 
-                            last_hash=self.last_export_hash
+                            last_hashes=self.last_export_hashes
                         )
                         
-                        if result and len(result) == 2:
-                            exported_files, current_hash = result
-                            
-                            if exported_files:  # Files were actually exported (hash changed)
-                                self.last_export_hash = current_hash
+                        if all_exported:
+                            # At least one document had changes
+                            exported_count = sum(len(files) for files in all_exported.values())
+                            if exported_count > 0:
+                                self.last_export_hashes = all_hashes
                                 if self.debug:
-                                    print(f"[DEBUG] Hash aktualisiert: {current_hash[:8]}...")
-                                print("🔄 Visio-Dokument wurde synchronisiert → VSCode.")
-                            else:
-                                # No changes - update hash but don't export
-                                self.last_export_hash = current_hash
-                                if self.debug:
-                                    print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
-                        elif self.debug:
-                            print("[DEBUG] Export-Result ungültig")
+                                    print(f"[DEBUG] Hashes aktualisiert: {list(all_hashes.keys())}")
+                                print("🔄 Visio-Dokument(e) wurden synchronisiert → VSCode.")
+                            elif self.debug:
+                                print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
+                        else:
+                            # Update hashes even if nothing exported
+                            if all_hashes:
+                                self.last_export_hashes = all_hashes
+                            if self.debug:
+                                print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
                 
                 finally:
                     # Always resume observer and clear flag
@@ -185,7 +193,7 @@ class VBAWatcher:
         self.observer.schedule(
             event_handler,
             str(self.watch_directory),
-            recursive=False
+            recursive=True  # Watch subdirectories for multi-document support
         )
         self.observer.start()
         
