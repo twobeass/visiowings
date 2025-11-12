@@ -88,17 +88,30 @@ class VBAWatcher:
         self.smart_poll_timer.daemon = True
         self.smart_poll_timer.start()
     
+    def _check_connection_silent(self):
+        """Check if connection is still active without verbose logging"""
+        try:
+            _ = self.importer.doc.Name
+            return True
+        except:
+            return False
+    
     def _poll_vba_changes(self):
         """Poll for VBA changes in Visio and export if changed"""
         try:
             import pythoncom
             pythoncom.CoInitialize()
             
-            # Reconnect in case document has been lost
-            if not self.importer._ensure_connection():
+            # Check connection silently first
+            if not self._check_connection_silent():
                 if self.debug:
-                    print("[DEBUG] Verbindung verloren, warte auf Wiederverbindung...")
-                return
+                    print("[DEBUG] Verbindung verloren, versuche neu zu verbinden...")
+                if not self.importer._ensure_connection():
+                    if self.debug:
+                        print("[DEBUG] Wiederverbindung fehlgeschlagen, warte auf nächsten Zyklus...")
+                    return
+                elif self.debug:
+                    print("[DEBUG] Wiederverbindung erfolgreich")
             
             if self.exporter:
                 # Set export flag to prevent file watcher from triggering
@@ -110,11 +123,18 @@ class VBAWatcher:
                 try:
                     # Create new exporter for this thread
                     from .vba_export import VisioVBAExporter
-                    thread_exporter = VisioVBAExporter(str(self.importer.visio_file_path), debug=self.debug)
+                    thread_exporter = VisioVBAExporter(
+                        str(self.importer.visio_file_path), 
+                        debug=self.debug
+                    )
                     
+                    # Connect silently (document is already open)
                     if thread_exporter.connect_to_visio():
                         # Export with hash comparison
-                        result = thread_exporter.export_modules(self.watch_directory, last_hash=self.last_export_hash)
+                        result = thread_exporter.export_modules(
+                            self.watch_directory, 
+                            last_hash=self.last_export_hash
+                        )
                         
                         if result and len(result) == 2:
                             exported_files, current_hash = result
@@ -124,8 +144,11 @@ class VBAWatcher:
                                 if self.debug:
                                     print(f"[DEBUG] Hash aktualisiert: {current_hash[:8]}...")
                                 print("🔄 Visio-Dokument wurde synchronisiert → VSCode.")
-                            elif self.debug:
-                                print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
+                            else:
+                                # No changes - update hash but don't export
+                                self.last_export_hash = current_hash
+                                if self.debug:
+                                    print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
                         elif self.debug:
                             print("[DEBUG] Export-Result ungültig")
                 
