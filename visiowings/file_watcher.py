@@ -27,7 +27,7 @@ class VBAFileHandler(FileSystemEventHandler):
             return
         if self.watcher.is_exporting:
             if self.debug:
-                print(f"[DEBUG] Ignoriere Änderung während Export: {file_path.name}")
+                print(f"[DEBUG] Ignoring change during export: {file_path.name}")
             return
         current_time = time.time()
         last_time = self.last_modified.get(str(file_path), 0)
@@ -38,9 +38,9 @@ class VBAFileHandler(FileSystemEventHandler):
         self.last_modified[str(file_path)] = current_time
         try:
             rel_path = file_path.relative_to(self.watcher.watch_directory)
-            print(f"\n📝 Änderung erkannt: {rel_path}")
+            print(f"\n📝 Change detected: {rel_path}")
         except ValueError:
-            print(f"\n📝 Änderung erkannt: {file_path.name}")
+            print(f"\n📝 Change detected: {file_path.name}")
         self.importer.import_module(file_path)
 
 class VBAWatcher:
@@ -60,14 +60,14 @@ class VBAWatcher:
     def _pause_observer(self):
         if self.observer and self.observer.is_alive():
             if self.debug:
-                print("[DEBUG] Pausiere Observer...")
+                print("[DEBUG] Pausing observer...")
             self.observer.stop()
             self.observer.join(timeout=2)
     
     def _resume_observer(self):
         if self.observer and not self.observer.is_alive():
             if self.debug:
-                print("[DEBUG] Starte Observer neu...")
+                print("[DEBUG] Restarting observer...")
             event_handler = VBAFileHandler(self.importer, self, debug=self.debug)
             self.observer = Observer()
             self.observer.schedule(
@@ -86,21 +86,21 @@ class VBAWatcher:
         try:
             import pythoncom
             pythoncom.CoInitialize()
-            # Erzeuge thread-local Importer und Exporter im Poll-Thread:
+            # Create thread-local Importer and Exporter in poll thread:
             from .vba_import import VisioVBAImporter
             from .vba_export import VisioVBAExporter
             local_importer = VisioVBAImporter(getattr(self.importer, 'visio_file_path', None), debug=self.debug)
             if not local_importer.connect_to_visio():
                 if self.debug:
-                    print("[DEBUG] Wiederverbindung fehlgeschlagen, warte auf nächsten Zyklus...")
+                    print("[DEBUG] Reconnection failed, waiting for next cycle...")
                 return
             if self.debug:
-                print("[DEBUG] Verbindung im Poll-Thread erfolgreich aufgebaut")
+                print("[DEBUG] Connection established successfully in poll thread")
             if self.exporter:
                 self.is_exporting = True
                 self._pause_observer()
                 try:
-                    # Export mit thread-local Exporter:
+                    # Export with thread-local Exporter:
                     thread_exporter = VisioVBAExporter(str(local_importer.visio_file_path), debug=self.debug)
                     if thread_exporter.connect_to_visio(silent=True):
                         all_exported, all_hashes = thread_exporter.export_modules(
@@ -112,22 +112,22 @@ class VBAWatcher:
                             if exported_count > 0:
                                 self.last_export_hashes = all_hashes
                                 if self.debug:
-                                    print(f"[DEBUG] Hashes aktualisiert: {list(all_hashes.keys())}")
-                                print("🔄 Visio-Dokument(e) wurden synchronisiert → VSCode.")
+                                    print(f"[DEBUG] Hashes updated: {list(all_hashes.keys())}")
+                                print("🔄 Visio document(s) synchronized → VS Code.")
                             elif self.debug:
-                                print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
+                                print("[DEBUG] No changes detected in Visio, no export.")
                         else:
                             if all_hashes:
                                 self.last_export_hashes = all_hashes
                             if self.debug:
-                                print("[DEBUG] Keine Änderungen in Visio erkannt, kein Export.")
+                                print("[DEBUG] No changes detected in Visio, no export.")
                 finally:
                     time.sleep(0.5)
                     self._resume_observer()
                     self.is_exporting = False
             self.last_vba_sync_time = time.time()
         except Exception as e:
-            print(f"⚠️  Fehler beim Polling-Export: {e}")
+            print(f"⚠️  Error during polling export: {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
@@ -150,13 +150,13 @@ class VBAWatcher:
             recursive=True  # Watch subdirectories for multi-document support
         )
         self.observer.start()
-        print(f"\n👁️  Überwache Verzeichnis: {self.watch_directory}")
-        print("💾 Speichere Dateien in VS Code (Ctrl+S) um sie nach Visio zu synchronisieren")
-        print("⏸️  Drücke Ctrl+C zum Beenden...\n")
+        print(f"\n👁️  Watching directory: {self.watch_directory}")
+        print("💾 Save files in VS Code (Ctrl+S) to synchronize them to Visio")
+        print("⏸️  Press Ctrl+C to stop...\n")
         if self.bidirectional and self.exporter:
-            print("🔄 Bidirektionaler Sync: Änderungen in Visio werden automatisch nach VSCode exportiert.")
+            print("🔄 Bidirectional sync: Changes in Visio are automatically exported to VS Code.")
             if self.debug:
-                print("[DEBUG] Debug-Modus aktiviert\n")
+                print("[DEBUG] Debug mode enabled\n")
             self._start_polling()
         try:
             while True:
@@ -167,7 +167,7 @@ class VBAWatcher:
         if self.observer:
             self.observer.stop()
             self.observer.join()
-            print("\n✓ Überwachung beendet")
+            print("\n✓ Monitoring stopped")
         if self.smart_poll_timer:
             self.smart_poll_timer.cancel()
-            print("✓ Polling gestoppt")
+            print("✓ Polling stopped")
