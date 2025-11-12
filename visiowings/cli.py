@@ -59,6 +59,7 @@ def cmd_edit(args):
         bidirectional=getattr(args, 'bidirectional', False),
         debug=debug
     )
+    watcher.last_export_hashes = all_hashes  # Fix: Übernehme initialen Export-Hash zum Watcher
     watcher.start()
 
 def cmd_export(args):
