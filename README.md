@@ -25,9 +25,13 @@
 - Consider using digitally signed macros and [Trusted Locations][9] for safer automation.
 - See [MS Office Security Notes][5][6][59] for recommended practices.
 
----
+```bash
+# Instead of this painful workflow:
+Visio VBA Editor -> No line numbers -> Limited editing -> Manual version control
 
-## UserForms: Always Handle .frm and .frx Together
+# You get this:
+VS Code -> Full editor features -> Live sync to Visio -> Automatic Git tracking
+```
 
 - UserForms consist of two files: `.frm` (text) _and_ `.frx` (resources, binary)
 - Both must be under version control and present during import/export; missing .frx leads to broken forms, lost controls, or import errors ([3][8]).
@@ -72,6 +76,183 @@ visiowings edit --file "C:/path/to/your/document.vsdm"
 ### 5. Importing
 - Always import/export UserForms as `.frm` + `.frx` pair
 - Missing `.frx` will break the form or lose controls/resources
+```bash
+code .  # Open VS Code in current directory
+```
+
+Now edit your `.bas`, `.cls`, or `.frm` files. Every time you save (Ctrl+S), the changes are **instantly synchronized** to Visio!
+
+## Usage
+
+### Edit Mode (with live sync)
+
+```bash
+# Basic mode (VS Code -> Visio only)
+visiowings edit --file document.vsdm
+
+# With bidirectional sync (VS Code <-> Visio)
+visiowings edit --file document.vsdm --bidirectional
+
+# Force overwrite Document modules (ThisDocument.cls)
+visiowings edit --file document.vsdm --force
+
+# Debug mode for troubleshooting
+visiowings edit --file document.vsdm --debug
+
+# All options combined
+visiowings edit --file document.vsdm --force --bidirectional --debug
+
+# Custom output directory
+visiowings edit --file document.vsdm --output ./vba_modules
+```
+
+### Export Only
+
+Export VBA modules without watching for changes:
+
+```bash
+visiowings export --file document.vsdm --output ./vba_modules
+```
+
+### Import Only
+
+Import VBA modules from files back into Visio:
+
+```bash
+visiowings import --file document.vsdm --input ./vba_modules --force
+```
+
+## Command Line Options
+
+### `edit` command
+
+| Option | Description |
+|--------|-------------|
+| `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
+| `--output`, `-o` | Export directory (default: current directory) |
+| `--force` | Force overwrite Document modules (ThisDocument.cls) |
+| `--bidirectional` | Enable bidirectional sync (Visio <-> VS Code) |
+| `--debug` | Enable verbose debug logging |
+
+### `export` command
+
+| Option | Description |
+|--------|-------------|
+| `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
+| `--output`, `-o` | Export directory (default: current directory) |
+| `--debug` | Enable verbose debug logging |
+
+### `import` command
+
+| Option | Description |
+|--------|-------------|
+| `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
+| `--input`, `-i` | Import directory (default: current directory) |
+| `--force` | Force overwrite Document modules (ThisDocument.cls) |
+| `--debug` | Enable verbose debug logging |
+
+## Example Workflow
+
+```bash
+# 1. Open your Visio file in Visio
+# 2. Navigate to your project folder
+cd C:/Projects/MyVisioProject
+
+# 3. Start visiowings with bidirectional sync
+visiowings edit --file "MyDiagram.vsdm" --force --bidirectional
+
+# Output:
+# 📂 Visio file: C:\Projects\MyVisioProject\MyDiagram.vsdm
+# 📁 Export directory: C:\Projects\MyVisioProject
+#
+# === Exporting VBA Modules ===
+# ✓ Exported: ThisDocument.cls
+# ✓ Exported: Module1.bas
+# ✓ Exported: ClassModule1.cls
+#
+# ✓ 3 modules exported
+#
+# === Starting Live Synchronization ===
+# 👁️  Watching directory: C:\Projects\MyVisioProject
+# 💾 Save files in VS Code (Ctrl+S) to synchronize them to Visio
+# 🔄 Bidirectional sync: Changes in Visio are automatically exported to VS Code.
+# ⏸️  Press Ctrl+C to stop...
+
+# 4. Edit Module1.bas in VS Code and save (Ctrl+S)
+# Output:
+# 📝 Change detected: Module1.bas
+# ✓ Imported: Module1.bas
+
+# 5. Edit VBA code in Visio (Alt+F11)
+# Output (after ~4 seconds):
+# 🔄 Visio document synchronized -> VS Code.
+
+# 6. Check VS Code - your changes from Visio are already there!
+
+```
+
+## Bidirectional Sync
+
+With the `--bidirectional` flag, visiowings enables two-way synchronization:
+
+- **VS Code -> Visio**: Changes saved in VS Code (Ctrl+S) are immediately imported to Visio
+- **Visio -> VS Code**: Changes in Visio VBA Editor are automatically exported to VS Code every 4 seconds
+
+### Smart Change Detection
+
+visiowings uses MD5 hash-based change detection to prevent unnecessary exports:
+
+- Only exports when VBA code actually changes
+- Prevents endless loops
+- Pauses file watcher during export operations
+- Efficient polling without constant file writes
+
+```bash
+# With debug mode, you can see the hash comparison:
+visiowings edit --file document.vsdm --bidirectional --debug
+
+# Output:
+# [DEBUG] Hash berechnet: 882c423e... (3 Module)
+# [DEBUG] Last hash: 882c423e...
+# [DEBUG] Current hash: 882c423e...
+# [DEBUG] Hashes identisch - kein Export
+# [DEBUG] Keine Änderungen in Visio erkannt, kein Export.
+```
+
+## Git Integration
+
+One of the **biggest benefits** is real-time Git integration:
+
+```bash
+# Initialize git in your project folder
+git init
+git add *.bas *.cls
+git commit -m "Initial VBA modules"
+
+# Now edit your VBA in VS Code
+# Git will show you changes in real-time!
+# Use VS Code's Git features:
+# - See diffs immediately
+# - Jump between changes (Alt+F5)
+# - Stage/unstage specific changes
+# - Commit with proper messages
+```
+
+## VS Code Setup
+
+### Recommended Extensions
+
+For the best experience, install these VS Code extensions:
+
+1. **VBA** (Wine-HQ or similar)
+   - Provides syntax highlighting for `.bas`, `.cls`, `.frm` files
+   - Search in VS Code: `@ext:vba`
+
+2. **GitLens**
+   - Enhanced Git integration
+   - Inline blame and history
+
+### Example VS Code Settings
 
 ---
 
