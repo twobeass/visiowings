@@ -4,6 +4,7 @@ Fix: COM threading (CoInitialize) in poll thread.
 Fix: Hash-based change detection to prevent endless loops.
 Fix: Pause observer during export to prevent file watcher triggers.
 Supports multiple documents (drawings + stencils).
+Extended: Optional sync-delete of Visio modules when .bas/.cls/.frm files are deleted (see CLI flag)
 """
 import time
 import threading
@@ -12,12 +13,13 @@ from watchdog.events import FileSystemEventHandler
 from pathlib import Path
 
 class VBAFileHandler(FileSystemEventHandler):
-    def __init__(self, importer, watcher, extensions=['.bas', '.cls', '.frm'], debug=False):
+    def __init__(self, importer, watcher, extensions=['.bas', '.cls', '.frm'], debug=False, sync_delete_modules=False):
         self.importer = importer
         self.watcher = watcher
         self.extensions = extensions
         self.last_modified = {}
         self.debug = debug
+        self.sync_delete_modules = sync_delete_modules
     
     def on_modified(self, event):
         if event.is_directory:
@@ -43,8 +45,30 @@ class VBAFileHandler(FileSystemEventHandler):
             print(f"\n📝 Change detected: {file_path.name}")
         self.importer.import_module(file_path)
 
+    def on_deleted(self, event):
+        if not self.sync_delete_modules or event.is_directory:
+            return
+        file_path = Path(event.src_path)
+        if file_path.suffix.lower() not in self.extensions:
+            return
+        module_name = file_path.stem
+        if self.debug:
+            print(f"[DEBUG] Local file deleted: {module_name}{file_path.suffix}")
+        # Remove corresponding module from Visio
+        for doc_info in self.importer.doc_manager.get_all_documents_with_vba():
+            vb_project = doc_info.doc.VBProject
+            for comp in vb_project.VBComponents:
+                if comp.Name == module_name:
+                    try:
+                        vb_project.VBComponents.Remove(comp)
+                        print(f"✓ Removed Visio module: {module_name} ({doc_info.name})")
+                        if self.debug:
+                            print(f"[DEBUG] Module '{module_name}' removed from '{doc_info.name}' due to local delete")
+                    except Exception as e:
+                        print(f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {e}")
+
 class VBAWatcher:
-    def __init__(self, watch_directory, importer, exporter=None, bidirectional=False, debug=False):
+    def __init__(self, watch_directory, importer, exporter=None, bidirectional=False, debug=False, sync_delete_modules=False):
         self.watch_directory = watch_directory
         self.importer = importer
         self.exporter = exporter
@@ -56,6 +80,7 @@ class VBAWatcher:
         self.last_export_hashes = {}  # Track hash per document: {doc_folder: hash}
         self.is_exporting = False  # Flag to prevent concurrent operations
         self.doc = importer.doc
+        self.sync_delete_modules = sync_delete_modules
     
     def _pause_observer(self):
         if self.observer and self.observer.is_alive():
@@ -68,7 +93,7 @@ class VBAWatcher:
         if self.observer and not self.observer.is_alive():
             if self.debug:
                 print("[DEBUG] Restarting observer...")
-            event_handler = VBAFileHandler(self.importer, self, debug=self.debug)
+            event_handler = VBAFileHandler(self.importer, self, debug=self.debug, sync_delete_modules=self.sync_delete_modules)
             self.observer = Observer()
             self.observer.schedule(
                 event_handler,
@@ -100,7 +125,6 @@ class VBAWatcher:
                 self.is_exporting = True
                 self._pause_observer()
                 try:
-                    # Export with thread-local Exporter:
                     thread_exporter = VisioVBAExporter(str(local_importer.visio_file_path), debug=self.debug)
                     if thread_exporter.connect_to_visio(silent=True):
                         all_exported, all_hashes = thread_exporter.export_modules(
@@ -142,7 +166,7 @@ class VBAWatcher:
                 self._start_polling()
     
     def start(self):
-        event_handler = VBAFileHandler(self.importer, self, debug=self.debug)
+        event_handler = VBAFileHandler(self.importer, self, debug=self.debug, sync_delete_modules=self.sync_delete_modules)
         self.observer = Observer()
         self.observer.schedule(
             event_handler,
