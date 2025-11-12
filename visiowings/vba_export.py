@@ -1,9 +1,12 @@
-"""VBA Module Export functionality: improved header stripping and hash-based change detection"""
+"""VBA Module Export functionality: improved header stripping and hash-based change detection
+Now supports multiple documents (drawings + stencils)
+"""
 import win32com.client
 import os
 from pathlib import Path
 import re
 import hashlib
+from .document_manager import VisioDocumentManager, VisioDocumentInfo
 
 class VisioVBAExporter:
     def __init__(self, visio_file_path, debug=False):
@@ -11,27 +14,27 @@ class VisioVBAExporter:
         self.visio_app = None
         self.doc = None
         self.debug = debug
+        self.doc_manager = None
     
     def connect_to_visio(self, silent=False):
-        """Connect to Visio application and open document
+        """Connect to Visio application and discover all documents
         
         Args:
             silent: If True, suppress connection success messages (used in polling)
         """
         try:
-            self.visio_app = win32com.client.Dispatch("Visio.Application")
-            # Try to find already open document first
-            for doc in self.visio_app.Documents:
-                if doc.FullName.lower() == str(self.visio_file_path).lower():
-                    self.doc = doc
-                    if self.debug and not silent:
-                        print(f"[DEBUG] Verbunden mit geöffnetem Dokument: {doc.Name}")
-                    return True
+            # Use DocumentManager for multi-document support
+            self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
             
-            # If not open, open it
-            self.doc = self.visio_app.Documents.Open(self.visio_file_path)
-            if self.debug and not silent:
-                print(f"[DEBUG] Dokument geöffnet: {self.doc.Name}")
+            if not self.doc_manager.connect_to_visio():
+                return False
+            
+            self.visio_app = self.doc_manager.visio_app
+            self.doc = self.doc_manager.main_doc
+            
+            if not silent:
+                self.doc_manager.print_summary()
+            
             return True
         except Exception as e:
             if not silent:
@@ -106,38 +109,32 @@ class VisioVBAExporter:
                 print(f"[DEBUG] Fehler bei Hash-Berechnung: {e}")
             return None
     
-    def export_modules(self, output_dir, last_hash=None):
-        """Export VBA modules, only if content changed (via hash comparison)
+    def _export_document_modules(self, doc_info, output_dir, last_hash=None):
+        """Export VBA modules from a single document
+        
+        Args:
+            doc_info: VisioDocumentInfo instance
+            output_dir: Base output directory (will create subdirectory for document)
+            last_hash: Last known hash for this document
         
         Returns:
             tuple: (list of exported files, current hash)
-                  Returns ([], last_hash) if no changes detected
         """
-        if not self.doc:
-            print("❌ Kein Dokument geöffnet")
-            return [], None
-        
         try:
-            vb_project = self.doc.VBProject
+            vb_project = doc_info.doc.VBProject
             
             # Calculate current hash
             current_hash = self._module_content_hash(vb_project)
             
-            if self.debug:
-                print(f"[DEBUG] Last hash: {last_hash[:8] if last_hash else 'None'}...")
-                print(f"[DEBUG] Current hash: {current_hash[:8] if current_hash else 'None'}...")
-            
             # Check if content actually changed
             if last_hash and last_hash == current_hash:
                 if self.debug:
-                    print("[DEBUG] Hashes identisch - kein Export")
-                else:
-                    print("✓ Keine Änderungen erkannt – kein Export notwendig")
-                return [], current_hash  # Return empty list but current hash
+                    print(f"[DEBUG] {doc_info.name}: Hashes identisch - kein Export")
+                return [], current_hash
             
-            # Content changed, perform export
-            output_path = Path(output_dir)
-            output_path.mkdir(exist_ok=True)
+            # Create subdirectory for this document
+            doc_output_path = Path(output_dir) / doc_info.folder_name
+            doc_output_path.mkdir(parents=True, exist_ok=True)
             
             exported_files = []
             
@@ -152,7 +149,7 @@ class VisioVBAExporter:
                 
                 ext = ext_map.get(component.Type, '.bas')
                 file_name = f"{component.Name}{ext}"
-                file_path = output_path / file_name
+                file_path = doc_output_path / file_name
                 
                 # Export module
                 component.Export(str(file_path))
@@ -162,9 +159,63 @@ class VisioVBAExporter:
                     self._strip_vba_header_file(file_path)
                 
                 exported_files.append(file_path)
-                print(f"✓ Exportiert: {file_name}")
+                print(f"✓ Exportiert: {doc_info.folder_name}/{file_name}")
             
             return exported_files, current_hash
+        
+        except Exception as e:
+            print(f"❌ Fehler beim Exportieren von {doc_info.name}: {e}")
+            if self.debug:
+                import traceback
+                traceback.print_exc()
+            return [], None
+    
+    def export_modules(self, output_dir, last_hashes=None):
+        """Export VBA modules from all documents with VBA code
+        
+        Args:
+            output_dir: Base output directory
+            last_hashes: Dict mapping document folder names to their last hash
+        
+        Returns:
+            tuple: (dict of {doc_folder: exported_files}, dict of {doc_folder: hash})
+        """
+        if not self.doc_manager:
+            print("❌ Kein Dokument-Manager initialisiert")
+            return {}, {}
+        
+        if last_hashes is None:
+            last_hashes = {}
+        
+        all_exported = {}
+        all_hashes = {}
+        
+        documents = self.doc_manager.get_all_documents_with_vba()
+        
+        if not documents:
+            print("⚠️  Keine Dokumente mit VBA-Code gefunden")
+            return {}, {}
+        
+        try:
+            output_path = Path(output_dir)
+            output_path.mkdir(exist_ok=True)
+            
+            for doc_info in documents:
+                if self.debug:
+                    print(f"[DEBUG] Exportiere {doc_info.name}...")
+                
+                last_hash = last_hashes.get(doc_info.folder_name)
+                exported_files, current_hash = self._export_document_modules(
+                    doc_info, 
+                    output_dir, 
+                    last_hash
+                )
+                
+                if exported_files or current_hash:
+                    all_exported[doc_info.folder_name] = exported_files
+                    all_hashes[doc_info.folder_name] = current_hash
+            
+            return all_exported, all_hashes
         
         except Exception as e:
             print(f"❌ Fehler beim Exportieren: {e}")
@@ -177,4 +228,4 @@ class VisioVBAExporter:
                 print("   Datei → Optionen → Trust Center → Trust Center-Einstellungen")
                 print("   → Makroeinstellungen → 'Zugriff auf VBA-Projektobjektmodell vertrauen'")
             
-            return [], None
+            return {}, {}
