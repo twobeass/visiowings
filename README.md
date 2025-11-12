@@ -327,20 +327,6 @@ visiowings edit --file document.vsdm --force
 
 Without `--force`, Document modules are skipped with a warning.
 
-## Comparison with xlwings
-
-**visiowings** is heavily inspired by [xlwings](https://www.xlwings.org/)'s VBA editing feature:
-
-| Feature | xlwings (Excel) | visiowings (Visio) |
-|---------|----------------|--------------------||
-| Edit VBA in VS Code | ✅ | ✅ |
-| Live sync | ✅ | ✅ |
-| Bidirectional sync | ✅ | ✅ |
-| Export/Import | ✅ | ✅ |
-| Hash-based change detection | ✅ | ✅ |
-| Debug mode | ✅ | ✅ |
-| Python ↔ VBA calls | ✅ | ❌ (not yet) |
-| UDFs | ✅ | N/A |
 
 ## Roadmap
 
