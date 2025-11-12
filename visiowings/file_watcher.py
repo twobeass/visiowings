@@ -109,16 +109,16 @@ class VBAWatcher:
             import pythoncom
             pythoncom.CoInitialize()
             
-            # Check connection silently first
+            # Check connection silently and reconnect only if needed
             if not self._check_connection_silent():
-                if self.debug:
-                    print("[DEBUG] Verbindung verloren, versuche neu zu verbinden...")
+                # Connection lost - try to reconnect
                 if not self.importer._ensure_connection():
                     if self.debug:
                         print("[DEBUG] Wiederverbindung fehlgeschlagen, warte auf nächsten Zyklus...")
                     return
                 elif self.debug:
                     print("[DEBUG] Wiederverbindung erfolgreich")
+            # If connection is OK, continue silently to export
             
             if self.exporter:
                 # Set export flag to prevent file watcher from triggering
