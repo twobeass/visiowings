@@ -1,4 +1,6 @@
-"""Command Line Interface for visiowings with bidirectional sync support"""
+"""Command Line Interface for visiowings with bidirectional sync support
+Now supports multiple documents (drawings + stencils)
+"""
 import argparse
 from pathlib import Path
 from .vba_export import VisioVBAExporter
@@ -25,19 +27,25 @@ def cmd_edit(args):
     if not exporter.connect_to_visio():
         return
     
-    result = exporter.export_modules(output_dir)
-    if not result or len(result) != 2:
+    # Export returns dict format for multi-document support
+    all_exported, all_hashes = exporter.export_modules(output_dir)
+    
+    if not all_exported:
         print("❌ Keine Module exportiert")
         return
     
-    exported_files, initial_hash = result
-    if not exported_files:
-        print("❌ Keine Module exportiert")
-        return
+    # Count total exported files
+    total_files = sum(len(files) for files in all_exported.values())
+    total_docs = len(all_exported)
     
-    print(f"\n✓ {len(exported_files)} Module exportiert")
+    if total_docs > 1:
+        print(f"\n✓ {total_files} Module aus {total_docs} Dokumenten exportiert")
+    else:
+        print(f"\n✓ {total_files} Module exportiert")
+    
     if debug:
-        print(f"[DEBUG] Initial hash: {initial_hash[:8]}...")
+        for doc_folder, doc_hash in all_hashes.items():
+            print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
     
     print("\n=== Starte Live-Synchronisation ===")
     importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug)
@@ -61,13 +69,20 @@ def cmd_export(args):
     
     exporter = VisioVBAExporter(str(visio_file), debug=debug)
     if exporter.connect_to_visio():
-        result = exporter.export_modules(output_dir)
-        if result and len(result) == 2:
-            exported_files, hash_value = result
-            if exported_files:
-                print(f"\n✓ {len(exported_files)} Module exportiert")
-                if debug:
-                    print(f"[DEBUG] Hash: {hash_value[:8]}...")
+        all_exported, all_hashes = exporter.export_modules(output_dir)
+        
+        if all_exported:
+            total_files = sum(len(files) for files in all_exported.values())
+            total_docs = len(all_exported)
+            
+            if total_docs > 1:
+                print(f"\n✓ {total_files} Module aus {total_docs} Dokumenten exportiert")
+            else:
+                print(f"\n✓ {total_files} Module exportiert")
+            
+            if debug:
+                for doc_folder, doc_hash in all_hashes.items():
+                    print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
 
 def cmd_import(args):
     """Import command: Import VBA modules only"""
@@ -78,10 +93,21 @@ def cmd_import(args):
     importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug)
     if importer.connect_to_visio():
         imported_count = 0
+        
+        # Import from root directory (backward compatibility)
         for ext in ['*.bas', '*.cls', '*.frm']:
             for file in input_dir.glob(ext):
                 if importer.import_module(file):
                     imported_count += 1
+        
+        # Import from subdirectories (multi-document support)
+        for doc_folder in importer.get_document_folders():
+            doc_dir = input_dir / doc_folder
+            if doc_dir.exists() and doc_dir.is_dir():
+                for ext in ['*.bas', '*.cls', '*.frm']:
+                    for file in doc_dir.glob(ext):
+                        if importer.import_module(file):
+                            imported_count += 1
         
         if imported_count > 0:
             print(f"\n✓ {imported_count} Module importiert")
@@ -90,8 +116,8 @@ def cmd_import(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='visiowings - VBA Editor für Visio mit VS Code Integration',
-        epilog='Beispiel: visiowings edit --file dokument.vsdm --force --bidirectional --debug'
+        description='visiowings - VBA Editor für Visio mit VS Code Integration (Multi-Dokument-Support)',
+        epilog='Beispiel: visiowings edit --file dokument.vsdx --force --bidirectional --debug'
     )
     
     subparsers = parser.add_subparsers(dest='command', help='Verfügbare Befehle')
@@ -101,12 +127,12 @@ def main():
         'edit', 
         help='VBA-Module bearbeiten mit Live-Sync (VS Code ↔ Visio)'
     )
-    edit_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm)')
+    edit_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm, .vsdx, .vstm, .vstx)')
     edit_parser.add_argument('--output', '-o', help='Export-Verzeichnis (Standard: aktuelles Verzeichnis)')
     edit_parser.add_argument(
         '--force', 
         action='store_true', 
-        help='Document-Module (überschreiben (ThisDocument.cls)'
+        help='Document-Module überschreiben (ThisDocument.cls)'
     )
     edit_parser.add_argument(
         '--bidirectional', 
@@ -121,7 +147,7 @@ def main():
     
     # Export command
     export_parser = subparsers.add_parser('export', help='VBA-Module exportieren (einmalig)')
-    export_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm)')
+    export_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm, .vsdx, .vstm, .vstx)')
     export_parser.add_argument('--output', '-o', help='Export-Verzeichnis (Standard: aktuelles Verzeichnis)')
     export_parser.add_argument(
         '--debug',
@@ -131,7 +157,7 @@ def main():
     
     # Import command
     import_parser = subparsers.add_parser('import', help='VBA-Module importieren (einmalig)')
-    import_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm)')
+    import_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm, .vsdx, .vstm, .vstx)')
     import_parser.add_argument('--input', '-i', help='Import-Verzeichnis (Standard: aktuelles Verzeichnis)')
     import_parser.add_argument(
         '--force', 
