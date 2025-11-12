@@ -1,8 +1,10 @@
 """VBA Module Import functionality
 Document module overwrite logic (force option)
-Reconnect fix for lost Visio document reference"""
+Removes VBA header when importing via force
+"""
 import win32com.client
 from pathlib import Path
+import re
 
 class VisioVBAImporter:
     """Importiert VBA-Module in Visio-Dokumente, optional mit force für Document-Module"""
@@ -32,12 +34,22 @@ class VisioVBAImporter:
     def _ensure_connection(self):
         """Stellt sicher, dass die Verbindung zum Dokument noch aktiv ist"""
         try:
-            # Teste ob das Dokument noch zugänglich ist
             _ = self.doc.Name
             return True
         except Exception:
             print("🔄 Verbindung verloren, versuche neu zu verbinden...")
             return self.connect_to_visio()
+    
+    def _strip_vba_header(self, code):
+        """Entfernt den VBA-Header aus exportierten .cls/.bas-Dateien"""
+        lines = code.splitlines()
+        code_start = 0
+        vba_header_pattern = re.compile(r'^(VERSION|Begin|End|Attribute )')
+        for i, line in enumerate(lines):
+            if not vba_header_pattern.match(line):
+                code_start = i
+                break
+        return '\n'.join(lines[code_start:])
 
     def import_module(self, file_path):
         """Importiert ein einzelnes VBA-Modul, überschreibt Document-Module falls 'force'"""
@@ -58,10 +70,11 @@ class VisioVBAImporter:
             if component and component.Type == 100:  # vbext_ct_Document
                 if self.force_document:
                     code = file_path.read_text(encoding="utf-8")
+                    code = self._strip_vba_header(code)
                     cm = component.CodeModule
                     cm.DeleteLines(1, cm.CountOfLines)
                     cm.AddFromString(code)
-                    print(f"✓ Code von {file_path.name} überschrieben (force)")
+                    print(f"✓ Code von {file_path.name} (ohne Header) überschrieben (force)")
                     return True
                 else:
                     print(f"⚠️  Document-Module '{module_name}' ohne --force übersprungen.")
