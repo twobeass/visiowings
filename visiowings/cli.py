@@ -1,5 +1,6 @@
 """Command Line Interface for visiowings with bidirectional sync support
 Now supports multiple documents (drawings + stencils)
+Extended: 'edit' command with --sync-delete-modules
 """
 import argparse
 from pathlib import Path
@@ -12,6 +13,7 @@ def cmd_edit(args):
     visio_file = Path(args.file).resolve()
     output_dir = Path(args.output or '.').resolve()
     debug = getattr(args, 'debug', False)
+    sync_delete_modules = getattr(args, 'sync_delete_modules', False)
     
     if not visio_file.exists():
         print(f"❌ File not found: {visio_file}")
@@ -57,7 +59,8 @@ def cmd_edit(args):
         importer, 
         exporter=exporter, 
         bidirectional=getattr(args, 'bidirectional', False),
-        debug=debug
+        debug=debug,
+        sync_delete_modules=sync_delete_modules
     )
     watcher.last_export_hashes = all_hashes  # Fix: Transfer initial export hash to watcher
     watcher.start()
@@ -144,6 +147,11 @@ def main():
         '--debug',
         action='store_true',
         help='Debug mode: Verbose logging output'
+    )
+    edit_parser.add_argument(
+        '--sync-delete-modules',
+        action='store_true',
+        help='Automatically delete Visio modules when local .bas/.cls/.frm files are deleted'
     )
     
     # Export command
