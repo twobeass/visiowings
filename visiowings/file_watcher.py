@@ -1,12 +1,3 @@
-"""File system watcher for VBA modules
-Adds smart polling for VSCode ← Visio sync (detects document changes).
-Fix: COM threading (CoInitialize) in poll thread.
-Fix: Hash-based change detection to prevent endless loops.
-Fix: Pause observer during export to prevent file watcher triggers.
-Supports multiple documents (drawings + stencils).
-Extended: Optional sync-delete of Visio modules when .bas/.cls/.frm files are deleted (see CLI flag)
-Thread-safe: Deletes use thread-local COM connection!
-"""
 import time
 import threading
 from watchdog.observers import Observer
@@ -32,6 +23,11 @@ class VBAFileHandler(FileSystemEventHandler):
             if self.debug:
                 print(f"[DEBUG] Ignoring change during export: {file_path.name}")
             return
+        # FIX: Ignore empty file for import
+        if file_path.stat().st_size < 10:
+            if self.debug:
+                print(f"[DEBUG] Ignoring empty file for import: {file_path.name}")
+            return
         current_time = time.time()
         last_time = self.last_modified.get(str(file_path), 0)
         if current_time - last_time < 1.0:
@@ -56,8 +52,8 @@ class VBAFileHandler(FileSystemEventHandler):
             file_path = Path(event.src_path)
             if file_path.suffix.lower() not in self.extensions:
                 return
+            # FIX: Only remove module if module existed and was not empty
             module_name = file_path.stem
-            # Thread-local COM connection & importer
             importer_threadlocal = VisioVBAImporter(self.importer.visio_file_path, debug=self.debug)
             if not importer_threadlocal.connect_to_visio():
                 print("⚠️  Could not connect to Visio for module removal.")
@@ -65,7 +61,7 @@ class VBAFileHandler(FileSystemEventHandler):
             for doc_info in importer_threadlocal.doc_manager.get_all_documents_with_vba():
                 vb_project = doc_info.doc.VBProject
                 for comp in vb_project.VBComponents:
-                    if comp.Name == module_name:
+                    if comp.Name == module_name and comp.CodeModule.CountOfLines > 0:
                         try:
                             vb_project.VBComponents.Remove(comp)
                             print(f"✓ Removed Visio module: {module_name} ({doc_info.name})")
@@ -120,7 +116,6 @@ class VBAWatcher:
         try:
             import pythoncom
             pythoncom.CoInitialize()
-            # Create thread-local Importer and Exporter in poll thread:
             from .vba_import import VisioVBAImporter
             from .vba_export import VisioVBAExporter
             local_importer = VisioVBAImporter(getattr(self.importer, 'visio_file_path', None), debug=self.debug)
