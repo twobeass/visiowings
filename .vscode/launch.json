@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Visio VBA (Launch)",
+            "type": "visiowings",
+            "request": "launch",
+            "visioFile": "${workspaceFolder}/example.vsd",
+            "stopOnEntry": false,
+            "trace": true
+        },
+        {
+            "name": "Debug Visio VBA (Attach)",
+            "type": "visiowings",
+            "request": "attach",
+            "visioFile": "${workspaceFolder}/example.vsd",
+            "sessionId": "${input:sessionId}",
+            "trace": true
+        },
+        {
+            "name": "Debug Visio VBA (Attach - Auto)",
+            "type": "visiowings",
+            "request": "attach",
+            "trace": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "sessionId",
+            "type": "promptString",
+            "description": "Enter debug session ID (leave empty for new session)",
+            "default": ""
+        }
+    ]
+}

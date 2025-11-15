@@ -1,0 +1,8 @@
+# Debug-specific dependencies for visiowings remote debugging
+
+# Core debugging requirements
+pywin32>=305
+asyncio>=3.4.3
+
+# Optional but recommended
+colorama>=0.4.6  # For colored console output
