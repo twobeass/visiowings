@@ -5,6 +5,7 @@ Supports multiple documents (drawings + stencils)
 Automatically repairs missing VBA headers for new .bas files (VS Code workflow)
 """
 import win32com.client
+import pythoncom
 from pathlib import Path
 import re
 from .document_manager import VisioDocumentManager
@@ -25,6 +26,13 @@ class VisioVBAImporter:
     def connect_to_visio(self):
         """Connects to already open document and discovers all documents"""
         try:
+            # Ensure COM is initialized in this thread
+            try:
+                pythoncom.CoInitialize()
+            except:
+                # Already initialized, that's fine
+                pass
+            
             self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
             if not self.doc_manager.connect_to_visio():
                 return False            
@@ -117,11 +125,30 @@ class VisioVBAImporter:
             file_path.write_text(text, encoding="utf-8")
 
     def import_module(self, file_path):
-        # Check connection before each import
-        if not self._ensure_connection():
-            print("⚠️  No connection to Visio - make sure the document is open")
-            return False
+        """Import a VBA module from file into Visio.
+        
+        This method ensures COM is initialized for thread safety,
+        as it may be called from file watcher threads.
+        """
+        # Initialize COM for this thread
+        com_initialized = False
         try:
+            pythoncom.CoInitialize()
+            com_initialized = True
+            if self.debug:
+                print(f"[DEBUG] COM initialized for import_module thread")
+        except:
+            # Already initialized in this thread
+            if self.debug:
+                print(f"[DEBUG] COM already initialized in this thread")
+            pass
+        
+        try:
+            # Check connection before each import
+            if not self._ensure_connection():
+                print("⚠️  No connection to Visio - make sure the document is open")
+                return False
+            
             file_path = Path(file_path)
             self._repair_vba_module_file(file_path)
             target_doc_info = self._find_document_for_file(file_path)
@@ -166,5 +193,15 @@ class VisioVBAImporter:
                 import traceback
                 traceback.print_exc()
             return False
+        finally:
+            # Uninitialize COM if we initialized it
+            if com_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                    if self.debug:
+                        print(f"[DEBUG] COM uninitialized for import_module thread")
+                except:
+                    pass
+    
     def get_document_folders(self):
         return list(self.document_map.keys())
