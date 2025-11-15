@@ -10,16 +10,8 @@ from .com_bridge import COMBridge
 from .breakpoint_manager import BreakpointManager
 from .event_monitor import VBAEventMonitor, VBAExecutionMode
 from .variable_inspector import VariableInspector
-from .call_stack import CallStackInspector
-from .error_handler import (
-    ErrorHandler,
-    BreakpointCleanupManager,
-    RecoveryManager,
-    DebugError,
-    COMError,
-    BreakpointError,
-    SessionError,
-)
+from .callstack_inspector import CallStackInspector
+from .error_handler import ErrorHandler, BreakpointCleanupManager
 
 __all__ = [
     'VisioDebugAdapter',
@@ -32,11 +24,6 @@ __all__ = [
     'CallStackInspector',
     'ErrorHandler',
     'BreakpointCleanupManager',
-    'RecoveryManager',
-    'DebugError',
-    'COMError',
-    'BreakpointError',
-    'SessionError',
 ]
 
 __version__ = '0.1.0'
