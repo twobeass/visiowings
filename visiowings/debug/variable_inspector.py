@@ -1,7 +1,7 @@
-"""Variable inspection and expression evaluation for VBA debugging.
+"""Variable inspection for VBA debugging.
 
-Provides structured access to VBA variables and expression evaluation
-through Watch window manipulation and Immediate window automation.
+Provides functionality to inspect and evaluate VBA variables
+during debugging sessions.
 """
 
 import logging
@@ -12,95 +12,50 @@ logger = logging.getLogger(__name__)
 
 
 class VariableInspector:
-    """Inspector for VBA variables and expressions.
+    """Inspect VBA variables during debugging.
     
-    Uses VBA Watch window and Immediate window for variable access.
+    Provides methods to evaluate expressions, extract variable values,
+    and parse variable declarations from code.
     """
 
     def __init__(self, com_bridge):
         """Initialize variable inspector.
         
         Args:
-            com_bridge: COMBridge instance for VBA access
+            com_bridge: COM bridge instance
         """
         self.com_bridge = com_bridge
-        self._watch_cache = {}
-        
-    def get_locals(self, frame_id: int = 0) -> List[Dict[str, Any]]:
-        """Get local variables for a stack frame.
-        
-        Args:
-            frame_id: Stack frame ID
-            
-        Returns:
-            List of variable dictionaries
-        """
-        try:
-            variables = []
-            
-            # Get current procedure's variables
-            # This is a simplified implementation - full implementation
-            # would parse VBA code to find variable declarations
-            
-            # For now, return placeholder with limited info
-            logger.debug(f"Getting locals for frame {frame_id}")
-            
-            return variables
-            
-        except Exception as e:
-            logger.error(f"Failed to get local variables: {e}")
-            return []
-    
-    def get_globals(self) -> List[Dict[str, Any]]:
-        """Get global/module-level variables.
-        
-        Returns:
-            List of variable dictionaries
-        """
-        try:
-            variables = []
-            
-            # Would need to parse module-level declarations
-            logger.debug("Getting global variables")
-            
-            return variables
-            
-        except Exception as e:
-            logger.error(f"Failed to get global variables: {e}")
-            return []
+        self._watch_cache: Dict[str, Any] = {}
     
     def evaluate_expression(self, expression: str) -> Dict[str, Any]:
         """Evaluate a VBA expression.
-        
-        Uses VBA's Immediate window to evaluate expressions when in break mode.
         
         Args:
             expression: VBA expression to evaluate
             
         Returns:
-            Dictionary with result, type, and value
+            Dictionary with result, type, and success status
         """
         try:
-            result = self._evaluate_via_immediate(expression)
+            # Try to evaluate using VBA's immediate window or watch
+            result = self._evaluate_via_watch(expression)
             
             return {
-                'result': result,
+                'success': True,
+                'result': str(result) if result is not None else 'Nothing',
                 'type': self._infer_type(result),
-                'value': str(result),
-                'variablesReference': 0,
             }
-            
         except Exception as e:
-            logger.error(f"Expression evaluation failed: {e}")
+            logger.error(f"Failed to evaluate '{expression}': {e}")
             return {
+                'success': False,
                 'result': None,
-                'type': 'error',
-                'value': str(e),
-                'variablesReference': 0,
+                'error': str(e),
+                'type': 'unknown',
             }
     
-    def _evaluate_via_immediate(self, expression: str) -> Any:
-        """Evaluate expression using Immediate window.
+    def _evaluate_via_watch(self, expression: str) -> Any:
+        """Evaluate expression via VBA watch window.
         
         Args:
             expression: Expression to evaluate
@@ -108,131 +63,36 @@ class VariableInspector:
         Returns:
             Evaluation result
         """
-        try:
-            if not self.com_bridge.vbe:
-                raise Exception("No VBE connection")
-            
-            # Access Immediate window
-            immediate = self.com_bridge.vbe.Windows("Immediate")
-            if not immediate:
-                raise Exception("Immediate window not available")
-            
-            # Make it visible
-            immediate.Visible = True
-            
-            # Try to use Debug.Print capture or Watch evaluation
-            # This is a placeholder - actual implementation would need
-            # to capture output from Immediate window or use Watch expressions
-            
-            logger.debug(f"Evaluating: {expression}")
-            
-            # Add as watch expression
-            result = self._add_watch_expression(expression)
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Immediate evaluation failed: {e}")
-            raise
-    
-    def _add_watch_expression(self, expression: str) -> Any:
-        """Add and evaluate a watch expression.
+        if not self.com_bridge.vbe:
+            raise Exception("No VBE connection")
         
-        Args:
-            expression: Expression to watch
-            
-        Returns:
-            Expression value
-        """
         try:
-            if not self.com_bridge.active_project:
-                raise Exception("No active VBA project")
-            
-            # Access Watch collection
-            # Note: This requires VBA to be in break mode
+            # Access main window and watch window
             vbe = self.com_bridge.vbe
             
-            # Try to add watch
-            watch = vbe.VBProjects(1).VBComponents(1).CodeModule
-            # This is simplified - actual Watch API varies by Visio version
+            # Try to use Immediate window for evaluation
+            # Note: This is a simplified implementation
+            # Full implementation would need to interact with VBA's evaluation context
             
-            # For now, return placeholder
-            logger.debug(f"Added watch for: {expression}")
+            # For now, cache and return placeholder
+            self._watch_cache[expression] = None
             return None
             
         except Exception as e:
-            logger.debug(f"Watch expression failed: {e}")
-            return None
-    
-    def get_variable_value(self, var_name: str) -> Dict[str, Any]:
-        """Get value of a specific variable.
-        
-        Args:
-            var_name: Variable name
-            
-        Returns:
-            Variable information dictionary
-        """
-        try:
-            value = self.evaluate_expression(var_name)
-            
-            return {
-                'name': var_name,
-                'value': value.get('value', ''),
-                'type': value.get('type', 'unknown'),
-                'variablesReference': 0,
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get variable '{var_name}': {e}")
-            return {
-                'name': var_name,
-                'value': '<error>',
-                'type': 'error',
-                'variablesReference': 0,
-            }
-    
-    def parse_variables_from_code(self, code: str) -> List[str]:
-        """Parse variable declarations from VBA code.
-        
-        Args:
-            code: VBA code to parse
-            
-        Returns:
-            List of variable names
-        """
-        variables = []
-        
-        try:
-            # Parse Dim, Public, Private declarations
-            patterns = [
-                r'\b(?:Dim|Public|Private|Static)\s+(\w+)\s+As\s+',
-                r'\b(?:Dim|Public|Private|Static)\s+(\w+)\s*(?:,|$)',
-            ]
-            
-            for pattern in patterns:
-                matches = re.finditer(pattern, code, re.IGNORECASE | re.MULTILINE)
-                for match in matches:
-                    var_name = match.group(1)
-                    if var_name not in variables:
-                        variables.append(var_name)
-            
-        except Exception as e:
-            logger.error(f"Failed to parse variables: {e}")
-        
-        return variables
+            logger.debug(f"Watch evaluation failed: {e}")
+            raise
     
     def _infer_type(self, value: Any) -> str:
         """Infer VBA type from Python value.
         
         Args:
-            value: Value to infer type from
+            value: Value to inspect
             
         Returns:
-            VBA type string
+            VBA type name
         """
         if value is None:
-            return 'Variant/Empty'
+            return 'Variant'
         elif isinstance(value, bool):
             return 'Boolean'
         elif isinstance(value, int):
@@ -244,48 +104,131 @@ class VariableInspector:
         else:
             return 'Variant'
     
-    def format_for_dap(self, var_name: str, value: Any, 
-                      var_ref: int = 0) -> Dict[str, Any]:
-        """Format variable for DAP protocol.
+    def parse_variables_from_code(self, code: str) -> Dict[str, Dict[str, str]]:
+        """Parse variable declarations from VBA code.
         
         Args:
-            var_name: Variable name
-            value: Variable value
-            var_ref: Variables reference for complex types
+            code: VBA code to parse
             
         Returns:
-            DAP-formatted variable dictionary
+            Dictionary mapping variable names to their attributes
         """
-        return {
-            'name': var_name,
-            'value': str(value) if value is not None else '<uninitialized>',
-            'type': self._infer_type(value),
-            'variablesReference': var_ref,
-            'evaluateName': var_name,
-        }
-    
-    def get_watch_variables(self) -> List[Dict[str, Any]]:
-        """Get all watch expressions.
+        variables = {}
         
+        # Patterns for variable declarations
+        patterns = [
+            # Dim x As Type
+            r'Dim\s+(\w+)\s+As\s+(\w+)',
+            # Public/Private x As Type  
+            r'(Public|Private)\s+(\w+)\s+As\s+(\w+)',
+            # Static x As Type
+            r'Static\s+(\w+)\s+As\s+(\w+)',
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, code, re.IGNORECASE)
+            for match in matches:
+                groups = match.groups()
+                if len(groups) == 2:
+                    # Dim var As Type
+                    name, vba_type = groups
+                    scope = 'local'
+                elif len(groups) == 3:
+                    # Public/Private var As Type
+                    scope, name, vba_type = groups
+                    scope = scope.lower()
+                else:
+                    continue
+                
+                variables[name] = {
+                    'type': vba_type,
+                    'scope': scope,
+                }
+        
+        return variables
+    
+    def get_local_variables(self, module_name: str, 
+                           procedure_name: str) -> List[Dict[str, Any]]:
+        """Get local variables for a procedure.
+        
+        Args:
+            module_name: Module name
+            procedure_name: Procedure name
+            
         Returns:
-            List of watch variable dictionaries
+            List of variable dictionaries
         """
         try:
-            watches = []
+            # Get procedure code
+            code = self._get_procedure_code(module_name, procedure_name)
+            if not code:
+                return []
             
-            # Iterate through VBE watch expressions
-            # This would access VBE.VBProjects(1).Watches collection
-            # Implementation depends on Visio COM API availability
+            # Parse variables
+            variables = self.parse_variables_from_code(code)
             
-            logger.debug("Getting watch variables")
+            # Convert to DAP format
+            result = []
+            for name, attrs in variables.items():
+                result.append({
+                    'name': name,
+                    'value': '<unknown>',
+                    'type': attrs.get('type', 'Variant'),
+                    'variablesReference': 0,
+                })
             
-            return watches
+            return result
             
         except Exception as e:
-            logger.error(f"Failed to get watch variables: {e}")
+            logger.error(f"Failed to get local variables: {e}")
             return []
     
-    def clear_cache(self):
-        """Clear the watch cache."""
-        self._watch_cache.clear()
-        logger.debug("Variable cache cleared")
+    def _get_procedure_code(self, module_name: str, 
+                           procedure_name: str) -> Optional[str]:
+        """Get code for a specific procedure.
+        
+        Args:
+            module_name: Module name
+            procedure_name: Procedure name
+            
+        Returns:
+            Procedure code or None
+        """
+        try:
+            if not self.com_bridge.active_project:
+                return None
+            
+            component = self.com_bridge.active_project.VBComponents(module_name)
+            code_module = component.CodeModule
+            
+            # Find procedure start and end lines
+            proc_start_line = code_module.ProcStartLine(procedure_name, 0)
+            proc_line_count = code_module.ProcCountLines(procedure_name, 0)
+            
+            # Get procedure code
+            return code_module.Lines(proc_start_line, proc_line_count)
+            
+        except Exception as e:
+            logger.debug(f"Could not get procedure code: {e}")
+            return None
+    
+    def format_for_dap(self, variables: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Format variables for Debug Adapter Protocol.
+        
+        Args:
+            variables: Dictionary of variables
+            
+        Returns:
+            List of DAP-formatted variable dictionaries
+        """
+        result = []
+        
+        for name, value in variables.items():
+            result.append({
+                'name': name,
+                'value': str(value) if value is not None else 'Nothing',
+                'type': self._infer_type(value),
+                'variablesReference': 0,
+            })
+        
+        return result
