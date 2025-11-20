@@ -92,11 +92,31 @@ class VisioVBAImporter:
             print(f"[DEBUG] File {file_path.name} assigned to main document")
         return main_doc_info
 
+    def _remove_option_explicit_from_body(self, text):
+        """
+        Removes any standalone 'Option Explicit' statements from the text body.
+        This ensures that when we prepend a header with Option Explicit,
+        we don't create duplicates.
+        """
+        lines = text.splitlines(keepends=True)
+        # Pattern to match "Option Explicit" (case insensitive, flexible whitespace)
+        option_explicit_pattern = re.compile(r'^\s*Option\s+Explicit\s*$', re.IGNORECASE)
+        
+        filtered_lines = []
+        for line in lines:
+            # Remove the line ending temporarily for pattern matching
+            line_content = line.rstrip('\r\n')
+            if not option_explicit_pattern.match(line_content):
+                filtered_lines.append(line)
+        
+        return ''.join(filtered_lines)
+
     def _repair_vba_module_file(self, file_path):
         """
         Ensures the file has a correct VBA header and minimal code so that import does not fail.
         If the file is empty, adds a valid header and a dummy Sub.
         If the header is missing, adds it derived from filename.
+        Removes any existing Option Explicit from the body to avoid duplicates.
         """
         try:
             text = file_path.read_text(encoding="utf-8")
@@ -112,6 +132,8 @@ class VisioVBAImporter:
             text = header + '\n' + dummy_sub
             needs_write = True
         elif 'Attribute VB_Name' not in text:
+            # Remove any existing Option Explicit from body before prepending header
+            text = self._remove_option_explicit_from_body(text)
             # Prepend header if not present
             text = header + text
             needs_write = True
