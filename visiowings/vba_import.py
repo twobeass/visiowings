@@ -111,39 +111,75 @@ class VisioVBAImporter:
         
         return ''.join(filtered_lines)
 
+    def _has_actual_code_content(self, text):
+        """
+        Checks if the text contains actual VBA code beyond just headers and Option Explicit.
+        Returns True if there's meaningful code content.
+        """
+        lines = text.splitlines()
+        vba_header_pattern = re.compile(r'^(VERSION|Begin|End|Attribute |MultiUse)', re.IGNORECASE)
+        option_explicit_pattern = re.compile(r'^\s*Option\s+Explicit\s*$', re.IGNORECASE)
+        
+        for line in lines:
+            stripped = line.strip()
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith("'"):
+                continue
+            # Skip VBA header lines
+            if vba_header_pattern.match(line):
+                continue
+            # Skip Option Explicit
+            if option_explicit_pattern.match(line):
+                continue
+            # If we found a non-header, non-comment line, there's actual code
+            return True
+        
+        return False
+
     def _repair_vba_module_file(self, file_path):
         """
         Ensures the file has a correct VBA header and minimal code so that import does not fail.
-        If the file is empty, adds a valid header and a dummy Sub.
-        If the header is missing, adds it derived from filename.
+        If the file is completely empty, adds a valid header and a dummy Sub.
+        If the header is missing but content exists, adds the header.
         Removes any existing Option Explicit from the body to avoid duplicates.
+        Does NOT add dummy code to files that already have a header with content.
         """
         try:
             text = file_path.read_text(encoding="utf-8")
         except Exception:
             text = ""
+        
         module_name = file_path.stem
         header = f'Attribute VB_Name = "{module_name}"\nOption Explicit\n'
         dummy_sub = f'Sub Dummy()\nEnd Sub\n'
         needs_write = False
+        has_header = 'Attribute VB_Name' in text
 
-        # If empty file, insert header + dummy sub
+        # Case 1: Completely empty file - add header + dummy sub so import doesn't fail
         if not text.strip():
             text = header + '\n' + dummy_sub
             needs_write = True
-        elif 'Attribute VB_Name' not in text:
+        # Case 2: Has header but no actual code - add dummy sub only if truly empty
+        elif has_header and not self._has_actual_code_content(text):
+            # File has header but no code yet - add dummy sub to prevent import errors
+            text = text.rstrip() + '\n\n' + dummy_sub
+            needs_write = True
+        # Case 3: Missing header but has content - prepend header
+        elif not has_header and text.strip():
             # Remove any existing Option Explicit from body before prepending header
             text = self._remove_option_explicit_from_body(text)
             # Prepend header if not present
             text = header + text
             needs_write = True
+        
         # Always ensure trailing newline
-        if not text.endswith("\n"):
+        if text and not text.endswith("\n"):
             text += "\n"
             needs_write = True
+            
         if needs_write:
             if self.debug:
-                print(f"[DEBUG] Auto-repaired/module-header for {file_path.name}")
+                print(f"[DEBUG] Auto-repaired module header for {file_path.name}")
             file_path.write_text(text, encoding="utf-8")
 
     def import_module(self, file_path):
