@@ -112,6 +112,38 @@ class VisioVBAExporter:
         except Exception as e:
             print(f"⚠️  Encoding or cleaning error for {file_path}: {e}")
             return None
+
+    def _read_local_file_with_fallback(self, file_path):
+        """Read local file with encoding fallback for backwards compatibility.
+        
+        Tries UTF-8 first (new standard), falls back to cp1252 (legacy encoding)
+        and automatically converts to UTF-8 for future compatibility.
+        
+        Args:
+            file_path: Path object to the file
+            
+        Returns:
+            str: File content decoded as UTF-8
+            
+        Raises:
+            Exception: If file cannot be read with either encoding
+        """
+        try:
+            # Try UTF-8 first (current standard)
+            return file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            # Fall back to cp1252 for legacy files from before encoding standardization
+            if self.debug:
+                print(f"[DEBUG] {file_path.name} not UTF-8, reading as cp1252 and converting")
+            try:
+                content = file_path.read_text(encoding="cp1252")
+                # Auto-convert to UTF-8 for future compatibility
+                file_path.write_text(content, encoding="utf-8")
+                if self.debug:
+                    print(f"[DEBUG] Converted {file_path.name} to UTF-8")
+                return content
+            except Exception as fallback_error:
+                raise Exception(f"Cannot read {file_path.name} as UTF-8 or cp1252: {fallback_error}")
         
 
     def _module_content_hash(self, vb_project):
@@ -137,8 +169,8 @@ class VisioVBAExporter:
         Returns: (are_different, local_hash, visio_hash)
         """
         try:
-            # Read local file and strip ALL headers for comparison
-            local_content = local_path.read_text(encoding="utf-8")
+            # Read local file with encoding fallback for backwards compatibility
+            local_content = self._read_local_file_with_fallback(local_path)
             local_normalized = self._strip_vba_header_export(local_content, keep_vb_name=False)  # ← False!
             
             # Get Visio module content and strip ALL headers for comparison
@@ -254,8 +286,8 @@ class VisioVBAExporter:
                     for fname, info in files_with_changes.items():
                         print(f"\n{doc_info.folder_name}/{fname}")
                         
-                        # Read local file and normalize WITHOUT VB_Name for fair comparison
-                        local_content = info['path'].read_text(encoding="utf-8")
+                        # Read local file with encoding fallback and normalize WITHOUT VB_Name
+                        local_content = self._read_local_file_with_fallback(info['path'])
                         local_clean = self._strip_vba_header_export(local_content, keep_vb_name=False)  # ← False!
                         
                         # Get Visio content and normalize WITHOUT VB_Name for fair comparison
