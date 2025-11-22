@@ -10,6 +10,7 @@ import re
 import hashlib
 import tempfile
 from .document_manager import VisioDocumentManager, VisioDocumentInfo
+import difflib
 
 class VisioVBAExporter:
     def __init__(self, visio_file_path, debug=False):
@@ -53,76 +54,41 @@ class VisioVBAExporter:
         # Join with consistent line ending
         return '\n'.join(normalized_lines)
     
-    def _strip_vba_header_file(self, file_path):
-        """Strip VBA header metadata while preserving Attribute VB_Name and all code/comments
-        
-        This removes:
-        - VERSION lines
-        - Begin/End blocks
-        - MultiUse lines
-        - Attribute lines EXCEPT Attribute VB_Name
-        
-        This preserves:
-        - Attribute VB_Name (required for module identification)
-        - All comments (including those before Option Explicit)
-        - Option Explicit and all code
-        """
-        try:
-            # Visio exports files in Windows-1252 (ANSI), so read with that encoding
-            text = Path(file_path).read_text(encoding="cp1252")
-            
-            lines = text.splitlines()
-            filtered_lines = []
-            in_header = True
-            
-            for line in lines:
-                stripped = line.strip()
-                
-                # Remove VERSION lines (e.g., VERSION 5.00)
-                if line.startswith('VERSION'):
-                    continue
-                
-                # Remove Begin/End blocks (e.g., Begin {GUID}...End)
-                if line.startswith(('Begin ', 'End')) and ('{' in line or not stripped):
-                    continue
-                
-                # Remove MultiUse lines
-                if line.startswith('MultiUse'):
-                    continue
-                
-                # Handle Attribute lines: Keep VB_Name, remove others
-                if line.startswith('Attribute '):
-                    if 'VB_Name' in line:
-                        filtered_lines.append(line)
-                    continue
-                
-                # Once we hit actual content (comments, Option Explicit, or code), 
-                # keep everything from that point forward
-                if stripped:
-                    in_header = False
-                
-                # Keep all non-header lines (including empty lines after header)
-                if not in_header or stripped.startswith("'"):
+    def _strip_vba_header_export(self, text, keep_vb_name=True):
+        import re
+        lines = text.splitlines()
+        filtered_lines = []
+        for line in lines:
+            s = line.strip()
+            if s.startswith('VERSION') or s.startswith('MultiUse'):
+                continue
+            if re.match(r'^Begin( |\{)', s):
+                continue
+            if s == 'End':
+                continue
+            if s.startswith('Attribute '):
+                if keep_vb_name and 'VB_Name' in line:
                     filtered_lines.append(line)
-            
-            # Remove leading empty lines that may remain
-            while filtered_lines and not filtered_lines[0].strip():
-                filtered_lines.pop(0)
-            
-            new_text = '\n'.join(filtered_lines)
-            
-            # Write as UTF-8 for VS Code compatibility (converts from cp1252)
-            Path(file_path).write_text(new_text, encoding="utf-8")
-            
-            if self.debug:
-                removed_count = len(lines) - len(filtered_lines)
-                if removed_count > 0:
-                    print(f"[DEBUG] {removed_count} header lines removed from {file_path.name}")
+                continue
+            filtered_lines.append(line)
+        return '\n'.join(filtered_lines)
+
+    def _strip_and_convert(self, file_path):
+        # Read cp1252 (Visio export), clean headers, warn if transcoding loses data
+        try:
+            raw = Path(file_path).read_text(encoding="cp1252")
+            cleaned = self._strip_vba_header_export(raw, keep_vb_name=True)
+            try:
+                cleaned.encode('utf-8')  # if this errors, warn below
+            except UnicodeEncodeError as e:
+                print(f"⚠️  Warning: {file_path.name} contains characters not representable in utf-8: {e}")
+            Path(file_path).write_text(cleaned, encoding="utf-8")
+            return cleaned
         except Exception as e:
-            if self.debug:
-                print(f"[DEBUG] Error during header stripping: {e}")
-            pass
-    
+            print(f"⚠️  Encoding or cleaning error for {file_path}: {e}")
+            return None
+        
+
     def _module_content_hash(self, vb_project):
         try:
             code_parts = []
@@ -197,7 +163,24 @@ class VisioVBAExporter:
             # Check for files with local changes
             files_with_changes = {}
             ext_map = {1: '.bas', 2: '.cls', 3: '.frm', 100: '.cls'}
-            
+            for file_name, file_path, visio_clean, local_clean in files_with_changes:
+                print(f"\n⚠️  File differs: {file_name}")
+                diff_lines = list(
+                    difflib.unified_diff(
+                        local_clean.splitlines(),
+                        visio_clean.splitlines(),
+                        fromfile='Local',
+                        tofile='Visio',
+                        lineterm=''
+                    )
+                )
+                if diff_lines:
+                    print('\n'.join(diff_lines))
+                response = input(f"Overwrite local file '{file_name}' with Visio content? (y/N): ").strip().lower()
+                if response not in ('y', 'yes'):
+                    print(f"⊘ Skipped: {file_name}")
+                    continue
+
             for component in vb_project.VBComponents:
                 ext = ext_map.get(component.Type, '.bas')
                 file_name = f"{component.Name}{ext}"
@@ -275,7 +258,7 @@ class VisioVBAExporter:
                 # Export the module
                 component.Export(str(file_path))
                 if component.Type in [1, 2, 100]:
-                    self._strip_vba_header_file(file_path)
+                    self._strip_and_convert(file_path)
                 exported_files.append(file_path)
                 visio_module_names.add(component.Name.lower())
                 print(f"✓ Exported: {doc_info.folder_name}/{file_name}")
