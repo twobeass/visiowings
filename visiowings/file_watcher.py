@@ -63,7 +63,8 @@ class VBAFileHandler(FileSystemEventHandler):
         
         # Import module (handles COM initialization internally)
         try:
-            self.importer.import_module(file_path)
+            self.importer.import_module(file_path, edit_mode=True)
+
         except Exception as e:
             print(f"❌ Error during import: {e}")
             if self.debug:
