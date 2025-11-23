@@ -2,6 +2,7 @@
 Now supports multiple documents (drawings + stencils)
 Enhanced: Remove local module files if deleted in Visio
 Fixed: Proper file comparison with normalization to avoid false positives
+Fixed: Proper VBA header handling for classes and forms with nested BEGIN blocks
 """
 import win32com.client
 import os
@@ -55,34 +56,70 @@ class VisioVBAExporter:
         return '\n'.join(normalized_lines)
     
     def _strip_vba_header_export(self, text, keep_vb_name=True):
-        import re
+        """Strip VBA headers with proper handling of classes and forms.
+        
+        This function removes VBA IDE metadata while preserving actual code:
+        - VERSION lines (VERSION 1.0 CLASS, VERSION 5.00, etc.)
+        - BEGIN...End blocks (including nested blocks in forms/classes)
+        - MultiUse declarations
+        - Attribute lines (except VB_Name when keep_vb_name=True)
+        
+        Args:
+            text: VBA code text to process
+            keep_vb_name: If True, preserves Attribute VB_Name line
+            
+        Returns:
+            Cleaned VBA code with headers removed
+        """
         lines = text.splitlines()
         filtered_lines = []
-        in_begin_block = False
+        begin_depth = 0  # Track nesting depth of BEGIN blocks
+        
+        # VBA code keywords that end with 'End' (case-insensitive)
+        code_end_keywords = {
+            'end sub', 'end function', 'end property', 'end if', 
+            'end with', 'end select', 'end type', 'end enum'
+        }
         
         for line in lines:
             s = line.strip()
+            s_lower = s.lower()
             
             # Remove VERSION lines
-            if s.startswith('VERSION'):
+            if s.upper().startswith('VERSION'):
                 continue
             
-            # Detect BEGIN block (case-insensitive, with or without parameters)
-            if re.match(r'^BEGIN(\s|$)', s, re.IGNORECASE):
-                in_begin_block = True
+            # Detect BEGIN block start (with any parameters)
+            # Matches: BEGIN, BEGIN VB.Form, BEGIN {GUID} ControlName, etc.
+            if re.match(r'^BEGIN\s+', s, re.IGNORECASE) or s_lower == 'begin':
+                begin_depth += 1
+                if self.debug:
+                    print(f"[DEBUG] BEGIN detected (depth={begin_depth}): {s[:50]}")
                 continue
             
-            # Detect END of BEGIN block (standalone END only)
-            if in_begin_block and re.match(r'^END$', s, re.IGNORECASE):
-                in_begin_block = False
+            # Detect END of BEGIN block
+            # Must be standalone 'End' or 'End Begin', not 'End Sub', 'End Function', etc.
+            if begin_depth > 0:
+                # Check if this is a block terminator END (not a code keyword)
+                is_block_end = (
+                    s_lower == 'end' or 
+                    s_lower == 'end begin' or
+                    (s_lower.startswith('end ') and s_lower not in code_end_keywords and 
+                     not any(s_lower.startswith(kw) for kw in code_end_keywords))
+                )
+                
+                if is_block_end:
+                    begin_depth -= 1
+                    if self.debug:
+                        print(f"[DEBUG] END detected (depth={begin_depth}): {s[:50]}")
+                    continue
+            
+            # Skip everything inside BEGIN...End blocks
+            if begin_depth > 0:
                 continue
             
-            # Skip everything inside BEGIN...END blocks
-            if in_begin_block:
-                continue
-            
-            # Remove standalone MultiUse lines (outside blocks too)
-            if s.startswith('MultiUse'):
+            # Remove standalone MultiUse lines (outside blocks)
+            if s_lower.startswith('multiuse'):
                 continue
             
             # Handle Attribute lines
@@ -91,8 +128,11 @@ class VisioVBAExporter:
                     filtered_lines.append(line)
                 continue
             
-            # Keep all other lines
+            # Keep all other lines (actual code)
             filtered_lines.append(line)
+        
+        if self.debug and begin_depth != 0:
+            print(f"[DEBUG] Warning: Unbalanced BEGIN/End blocks (final depth={begin_depth})")
         
         return '\n'.join(filtered_lines)
 
