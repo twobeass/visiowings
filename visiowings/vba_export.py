@@ -11,15 +11,18 @@ import re
 import hashlib
 import tempfile
 from .document_manager import VisioDocumentManager, VisioDocumentInfo
+from .encoding import resolve_encoding, DEFAULT_CODEPAGE
 import difflib
 
 class VisioVBAExporter:
-    def __init__(self, visio_file_path, debug=False):
+    def __init__(self, visio_file_path, debug=False, user_codepage=None):
         self.visio_file_path = visio_file_path
         self.visio_app = None
         self.doc = None
         self.debug = debug
         self.doc_manager = None
+        self.user_codepage = user_codepage
+        self.codepage = DEFAULT_CODEPAGE
     
     def connect_to_visio(self, silent=False):
         try:
@@ -28,6 +31,14 @@ class VisioVBAExporter:
                 return False
             self.visio_app = self.doc_manager.visio_app
             self.doc = self.doc_manager.main_doc
+            
+            # Resolve encoding (user-specified > document language)
+            self.codepage = resolve_encoding(
+                document=self.doc,
+                user_codepage=self.user_codepage,
+                debug=self.debug
+            )
+            
             if not silent:
                 self.doc_manager.print_summary()
             return True
@@ -139,12 +150,12 @@ class VisioVBAExporter:
 
 
     def _strip_and_convert(self, file_path):
-        # Read cp1252 (Visio export), clean headers, warn if transcoding loses data
+        # Read with configured encoding (Visio export), clean headers, warn if transcoding loses data
         # Only strip headers for .bas; preserve headers for .cls/.frm
         ext = file_path.suffix.lower()
         if ext == '.bas':
             try:
-                raw = Path(file_path).read_text(encoding="cp1252")
+                raw = Path(file_path).read_text(encoding=self.codepage)
                 cleaned = self._strip_vba_header_export(raw, keep_vb_name=True)
                 try:
                     cleaned.encode('utf-8')
@@ -158,7 +169,7 @@ class VisioVBAExporter:
         else:
             # For .cls and .frm: just convert encoding, don't touch contents
             try:
-                raw = Path(file_path).read_text(encoding="cp1252")
+                raw = Path(file_path).read_text(encoding=self.codepage)
                 Path(file_path).write_text(raw, encoding="utf-8")
                 return raw
             except Exception as e:
