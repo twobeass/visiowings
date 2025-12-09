@@ -159,7 +159,7 @@ class VisioVBAImporter:
                     print(f"⊘ Skipped: {module_name}")
                     return False
                 vb_project.VBComponents.Remove(component)
-            temp_file = self._create_temp_cp_file(file_path, self.codepage)
+            temp_file = self._create_temp_codepage_file(file_path, self.codepage)
             vb_project.VBComponents.Import(str(temp_file))
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
