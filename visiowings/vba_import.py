@@ -5,10 +5,11 @@ import re
 import sys
 import os
 from .document_manager import VisioDocumentManager
+from .encoding import resolve_encoding, DEFAULT_CODEPAGE
 from difflib import unified_diff
 
 class VisioVBAImporter:
-    def __init__(self, visio_file_path, force_document=False, debug=False, silent_reconnect=False, always_yes=False):
+    def __init__(self, visio_file_path, force_document=False, debug=False, silent_reconnect=False, always_yes=False, user_codepage=None):
         self.visio_file_path = visio_file_path
         self.visio_app = None
         self.doc = None
@@ -18,6 +19,8 @@ class VisioVBAImporter:
         self.doc_manager = None
         self.document_map = {}
         self.always_yes = always_yes
+        self.user_codepage = user_codepage
+        self.codepage = DEFAULT_CODEPAGE
 
     def connect_to_visio(self):
         try:
@@ -33,6 +36,14 @@ class VisioVBAImporter:
         if not self.doc:
             print("❌ Failed to connect to main document")
             return False
+        
+        # Resolve encoding (user-specified > document language)
+        self.codepage = resolve_encoding(
+            document=self.doc,
+            user_codepage=self.user_codepage,
+            debug=self.debug
+        )
+        
         for doc_info in self.doc_manager.get_all_documents_with_vba():
             self.document_map[doc_info.folder_name] = doc_info
         if self.debug:
@@ -67,12 +78,13 @@ class VisioVBAImporter:
             )
             return None
 
-    def _create_temp_cp1252_file(self, file_path):
+    def _create_temp_codepage_file(self, file_path, codepage):
+        """Create a temporary file with configured encoding for VBA import."""
         import tempfile
         try:
             text = file_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            text = file_path.read_text(encoding="cp1252")
+            text = file_path.read_text(encoding=codepage)
         module_name = file_path.stem
         if "Attribute VB_Name" not in text:
             header = f'Attribute VB_Name = "{module_name}"\n'
@@ -81,14 +93,14 @@ class VisioVBAImporter:
             text += "\n"
         fd, temp_path = tempfile.mkstemp(suffix=file_path.suffix, text=True)
         try:
-            with os.fdopen(fd, 'w', encoding='cp1252') as f:
+            with os.fdopen(fd, 'w', encoding=codepage) as f:
                 f.write(text)
             if self.debug:
-                print(f"[DEBUG] Created temp CP1252 file: {temp_path}")
+                print(f"[DEBUG] Created temp {codepage.upper()} file: {temp_path}")
             return temp_path
         except UnicodeEncodeError as e:
-            print(f"⚠️  Warning: {file_path.name} contains characters not supported in CP1252")
-            with os.fdopen(fd, 'w', encoding='cp1252', errors='replace') as f:
+            print(f"⚠️  Warning: {file_path.name} contains characters not supported in {codepage.upper()}")
+            with os.fdopen(fd, 'w', encoding=codepage, errors='replace') as f:
                 f.write(text)
             return temp_path
         except Exception:
@@ -130,7 +142,7 @@ class VisioVBAImporter:
                     try:
                         code = file_path.read_text(encoding="utf-8")
                     except Exception:
-                        code = file_path.read_text(encoding="cp1252", errors='replace')
+                        code = file_path.read_text(encoding=self.codepage, errors='replace')
                     code = self._strip_vba_header(code)
                     cm = component.CodeModule
                     if cm.CountOfLines > 0:
@@ -147,7 +159,7 @@ class VisioVBAImporter:
                     print(f"⊘ Skipped: {module_name}")
                     return False
                 vb_project.VBComponents.Remove(component)
-            temp_file = self._create_temp_cp1252_file(file_path)
+            temp_file = self._create_temp_cp_file(file_path, self.codepage)
             vb_project.VBComponents.Import(str(temp_file))
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
@@ -197,14 +209,14 @@ class VisioVBAImporter:
         try:
             text = file_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            text = file_path.read_text(encoding="cp1252")
+            text = file_path.read_text(encoding=self.codepage)
         module_name = file_path.stem
         header = f'Attribute VB_Name = "{module_name}"\nOption Explicit\n'
         if "Attribute VB_Name" not in text:
             text = header + text
         if text and not text.endswith("\n"):
             text += "\n"
-        file_path.write_text(text, encoding="cp1252", errors='replace')
+        file_path.write_text(text, encoding=self.codepage, errors='replace')
         return True
 
     def _read_module_code(self, file_path):
@@ -212,7 +224,7 @@ class VisioVBAImporter:
             return file_path.read_text(encoding="utf-8")
         except Exception:
             try:
-                return file_path.read_text(encoding="cp1252")
+                return file_path.read_text(encoding=self.codepage)
             except Exception:
                 return ""
 
@@ -385,7 +397,7 @@ class VisioVBAImporter:
                         orig_code = self._read_module_code(file_path)
                         # Strip headers for current import, preserving End Sub, End Function, etc
                         clean_code = self._strip_vba_header(orig_code)
-                        file_path.write_text(clean_code, encoding="cp1252", errors='replace')
+                        file_path.write_text(clean_code, encoding=self.codepage, errors='replace')
                         vb_project.VBComponents.Import(str(file_path))
                         print(f"✓ Imported: {doc_dir.name}/{group}/{module_name}")
                     except Exception as e:

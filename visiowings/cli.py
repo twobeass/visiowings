@@ -14,6 +14,7 @@ def cmd_edit(args):
     output_dir = Path(args.output or '.').resolve()
     debug = getattr(args, 'debug', False)
     sync_delete_modules = getattr(args, 'sync_delete_modules', False)
+    codepage = getattr(args, 'codepage', None)
     
     if not visio_file.exists():
         print(f"❌ File not found: {visio_file}")
@@ -23,9 +24,11 @@ def cmd_edit(args):
     print(f"📁 Export directory: {output_dir}")
     if debug:
         print("[DEBUG] Debug mode enabled")
+    if codepage:
+        print(f"📝 Codepage: {codepage}")
     
     print("\n=== Exporting VBA Modules ===")
-    exporter = VisioVBAExporter(str(visio_file), debug=debug)
+    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage)
     if not exporter.connect_to_visio():
         return
     
@@ -50,7 +53,7 @@ def cmd_edit(args):
             print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
     
     print("\n=== Starting Live Synchronization ===")
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, silent_reconnect=True)
+    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, silent_reconnect=True, user_codepage=codepage)
     if not importer.connect_to_visio():
         return
     
@@ -70,8 +73,9 @@ def cmd_export(args):
     visio_file = Path(args.file).resolve()
     output_dir = Path(args.output or '.').resolve()
     debug = getattr(args, 'debug', False)
+    codepage = getattr(args, 'codepage', None)
     
-    exporter = VisioVBAExporter(str(visio_file), debug=debug)
+    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage)
     if exporter.connect_to_visio():
         all_exported, all_hashes = exporter.export_modules(output_dir)
         
@@ -93,8 +97,9 @@ def cmd_import(args):
     visio_file = Path(args.file).resolve()
     input_dir = Path(args.input or '.').resolve()
     debug = getattr(args, 'debug', False)
+    codepage = getattr(args, 'codepage', None)
     
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug)
+    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, user_codepage=codepage)
     if importer.connect_to_visio():
         imported_count = 0
         
@@ -153,6 +158,10 @@ def main():
         action='store_true',
         help='Automatically delete Visio modules when local .bas/.cls/.frm files are deleted'
     )
+    edit_parser.add_argument(
+        '--codepage', '--cp',
+        help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
+    )
     
     # Export command
     export_parser = subparsers.add_parser('export', help='Export VBA modules (one-time)')
@@ -162,6 +171,10 @@ def main():
         '--debug',
         action='store_true',
         help='Debug mode: Verbose logging output'
+    )
+    export_parser.add_argument(
+        '--codepage', '--cp',
+        help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
     )
     
     # Import command
@@ -177,6 +190,10 @@ def main():
         '--debug',
         action='store_true',
         help='Debug mode: Verbose logging output'
+    )
+    import_parser.add_argument(
+        '--codepage', '--cp',
+        help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
     )
     
     args = parser.parse_args()
