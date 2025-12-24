@@ -3,8 +3,8 @@
 __version__ = '0.3.1'
 __author__ = 'twobeass'
 
+from .file_watcher import VBAWatcher
 from .vba_export import VisioVBAExporter
 from .vba_import import VisioVBAImporter
-from .file_watcher import VBAWatcher
 
 __all__ = ['VisioVBAExporter', 'VisioVBAImporter', 'VBAWatcher']
