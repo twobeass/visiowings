@@ -320,8 +320,13 @@ class VisioVBAImporter:
         ):
             print(line)
 
-        print(f"Overwrite module '{module_name}' in Visio with disk version? (y/N): ", end="")
+        print(f"Overwrite module '{module_name}' in Visio with disk version? (y/N/a): ", end="")
         ans = input().strip().lower()
+
+        if ans in ("a", "all"):
+            self.always_yes = True
+            return True
+
         return ans in ("y", "yes")
 
 
