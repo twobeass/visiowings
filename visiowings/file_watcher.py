@@ -1,39 +1,51 @@
-import time
-import threading
 import signal
 import sys
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import threading
+import time
 from pathlib import Path
+
 import pythoncom
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
 
 class VBAFileHandler(FileSystemEventHandler):
-    def __init__(self, importer, watcher, extensions=['.bas', '.cls', '.frm'], debug=False, sync_delete_modules=False):
+    def __init__(self, importer, watcher, extensions=None, debug=False, sync_delete_modules=False):
+        if extensions is None:
+            extensions = ['.bas', '.cls', '.frm']
         self.importer = importer
         self.watcher = watcher
         self.extensions = extensions
         self.last_modified = {}
         self.debug = debug
         self.sync_delete_modules = sync_delete_modules
-    
+
+    def on_created(self, event):
+        """Handle creation of new files"""
+        self._handle_change(event, change_type="created")
+
     def on_modified(self, event):
+        """Handle modification of existing files"""
+        self._handle_change(event, change_type="modified")
+
+    def _handle_change(self, event, change_type="modified"):
         # Check shutdown flag
         if self.watcher.shutdown_requested:
             return
-        
+
         if event.is_directory:
             return
-        
+
         file_path = Path(event.src_path)
-        
+
         if file_path.suffix not in self.extensions:
             return
-        
+
         if self.watcher.is_exporting:
             if self.debug:
-                print(f"[DEBUG] Ignoring change during export: {file_path.name}")
+                print(f"[DEBUG] Ignoring {change_type} during export: {file_path.name}")
             return
-        
+
         # Validate file exists and is not empty
         try:
             if not file_path.exists() or file_path.stat().st_size < 10:
@@ -42,9 +54,9 @@ class VBAFileHandler(FileSystemEventHandler):
                 return
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] Error checking file: {e}")
+                print(f"[DEBUG] Error checking file: {type(e).__name__}: {e}")
             return
-        
+
         # Debounce rapid changes
         current_time = time.time()
         last_time = self.last_modified.get(str(file_path), 0)
@@ -52,21 +64,21 @@ class VBAFileHandler(FileSystemEventHandler):
             if self.debug:
                 print(f"[DEBUG] Debouncing: {file_path.name}")
             return
-        
+
         self.last_modified[str(file_path)] = current_time
-        
+
         try:
             rel_path = file_path.relative_to(self.watcher.watch_directory)
-            print(f"\n📝 Change detected: {rel_path}")
+            print(f"\n📝 Change detected ({change_type}): {rel_path}")
         except ValueError:
-            print(f"\n📝 Change detected: {file_path.name}")
-        
+            print(f"\n📝 Change detected ({change_type}): {file_path.name}")
+
         # Import module (handles COM initialization internally)
         try:
             self.importer.import_module(file_path, edit_mode=True)
 
         except Exception as e:
-            print(f"❌ Error during import: {e}")
+            print(f"❌ Error during import ({type(e).__name__}): {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
@@ -75,35 +87,35 @@ class VBAFileHandler(FileSystemEventHandler):
         # Check shutdown flag
         if self.watcher.shutdown_requested:
             return
-        
+
         if not self.sync_delete_modules or event.is_directory:
             return
-        
+
         # COM initialization for this thread
         com_initialized = False
         try:
             pythoncom.CoInitialize()
             com_initialized = True
             if self.debug:
-                print(f"[DEBUG] COM initialized for on_deleted handler")
+                print("[DEBUG] COM initialized for on_deleted handler")
         except Exception as e:
             if self.debug:
                 print(f"[DEBUG] COM already initialized for on_deleted handler: {e}")
-        
+
         try:
             from .vba_import import VisioVBAImporter
-            
+
             file_path = Path(event.src_path)
             if file_path.suffix.lower() not in self.extensions:
                 return
-            
+
             module_name = file_path.stem
             importer_threadlocal = VisioVBAImporter(self.importer.visio_file_path, debug=self.debug)
-            
+
             if not importer_threadlocal.connect_to_visio():
                 print("⚠️  Could not connect to Visio for module removal.")
                 return
-            
+
             found_module = False
             for doc_info in importer_threadlocal.doc_manager.get_all_documents_with_vba():
                 try:
@@ -119,18 +131,18 @@ class VBAFileHandler(FileSystemEventHandler):
                                     if self.debug:
                                         print(f"[DEBUG] Module '{module_name}' removed from '{doc_info.name}' due to local delete")
                                 except Exception as e:
-                                    print(f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {e}")
+                                    print(f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {type(e).__name__}: {e}")
                             break
                 except Exception as e:
                     if self.debug:
-                        print(f"[DEBUG] Error accessing document {doc_info.name}: {e}")
-            
+                        print(f"[DEBUG] Error accessing document {doc_info.name}: {type(e).__name__}: {e}")
+
             if not found_module and self.debug:
                 print(f"[DEBUG] Module '{module_name}' not found in any Visio document")
-                
+
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] Error in on_deleted handler: {e}")
+                print(f"[DEBUG] Error in on_deleted handler: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
         finally:
@@ -138,7 +150,7 @@ class VBAFileHandler(FileSystemEventHandler):
                 try:
                     pythoncom.CoUninitialize()
                     if self.debug:
-                        print(f"[DEBUG] COM uninitialized for on_deleted handler")
+                        print("[DEBUG] COM uninitialized for on_deleted handler")
                 except Exception as e:
                     if self.debug:
                         print(f"[DEBUG] Error uninitializing COM: {e}")
@@ -158,7 +170,7 @@ class VBAWatcher:
         self.shutdown_requested = False  # Flag for graceful shutdown
         self.doc = importer.doc
         self.sync_delete_modules = sync_delete_modules
-    
+
     def _pause_observer(self):
         """Pause file system observer"""
         if self.observer and self.observer.is_alive():
@@ -170,12 +182,12 @@ class VBAWatcher:
             except Exception as e:
                 if self.debug:
                     print(f"[DEBUG] Error pausing observer: {e}")
-    
+
     def _resume_observer(self):
         """Resume file system observer"""
         if self.shutdown_requested:
             return
-        
+
         if self.observer and not self.observer.is_alive():
             if self.debug:
                 print("[DEBUG] Restarting observer...")
@@ -193,24 +205,24 @@ class VBAWatcher:
                 if self.debug:
                     import traceback
                     traceback.print_exc()
-    
+
     def _start_polling(self, poll_interval=4):
         """Start polling timer for bidirectional sync"""
         if self.shutdown_requested:
             return
-        
+
         self.smart_poll_timer = threading.Timer(poll_interval, self._poll_vba_changes)
         self.smart_poll_timer.daemon = True
         self.smart_poll_timer.start()
-    
+
     def _poll_vba_changes(self):
         """Poll for VBA changes in Visio and export to VS Code.
-        
+
         This runs in a separate thread, so COM must be initialized.
         """
         if self.shutdown_requested:
             return
-        
+
         # COM initialization for this thread
         com_initialized = False
         try:
@@ -221,34 +233,34 @@ class VBAWatcher:
         except Exception as e:
             if self.debug:
                 print(f"[DEBUG] COM already initialized for polling thread: {e}")
-        
+
         try:
-            from .vba_import import VisioVBAImporter
             from .vba_export import VisioVBAExporter
-            
+            from .vba_import import VisioVBAImporter
+
             local_importer = VisioVBAImporter(getattr(self.importer, 'visio_file_path', None), debug=self.debug)
-            
+
             if not local_importer.connect_to_visio():
                 if self.debug:
                     print("[DEBUG] Reconnection failed, waiting for next cycle...")
                 return
-            
+
             if self.debug:
                 print("[DEBUG] Connection established successfully in poll thread")
-            
+
             if self.exporter and not self.shutdown_requested:
                 self.is_exporting = True
                 self._pause_observer()
-                
+
                 try:
                     thread_exporter = VisioVBAExporter(str(local_importer.visio_file_path), debug=self.debug)
-                    
+
                     if thread_exporter.connect_to_visio(silent=True):
                         all_exported, all_hashes = thread_exporter.export_modules(
-                            self.watch_directory, 
+                            self.watch_directory,
                             last_hashes=self.last_export_hashes
                         )
-                        
+
                         if all_exported:
                             exported_count = sum(len(files) for files in all_exported.values())
                             if exported_count > 0:
@@ -263,7 +275,7 @@ class VBAWatcher:
                                 self.last_export_hashes = all_hashes
                             if self.debug:
                                 print("[DEBUG] No changes detected in Visio, no export.")
-                                
+
                 except Exception as e:
                     print(f"⚠️  Error during export: {e}")
                     if self.debug:
@@ -273,9 +285,9 @@ class VBAWatcher:
                     time.sleep(0.5)
                     self._resume_observer()
                     self.is_exporting = False
-            
+
             self.last_vba_sync_time = time.time()
-            
+
         except Exception as e:
             print(f"⚠️  Error during polling export: {e}")
             if self.debug:
@@ -291,25 +303,25 @@ class VBAWatcher:
                 except Exception as e:
                     if self.debug:
                         print(f"[DEBUG] Error uninitializing COM: {e}")
-            
+
             # Schedule next poll if bidirectional and not shutting down
             if self.bidirectional and not self.shutdown_requested:
                 self._start_polling()
-    
+
     def _handle_shutdown(self, signum, frame):
         """Handle shutdown signals gracefully"""
         print("\n\n⏸️  Shutting down gracefully...")
         self.shutdown_requested = True
         self.stop()
         sys.exit(0)
-    
+
     def start(self):
         """Start file watcher and optional bidirectional polling"""
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._handle_shutdown)
         if hasattr(signal, 'SIGTERM'):
             signal.signal(signal.SIGTERM, self._handle_shutdown)
-        
+
         try:
             event_handler = VBAFileHandler(self.importer, self, debug=self.debug, sync_delete_modules=self.sync_delete_modules)
             self.observer = Observer()
@@ -319,21 +331,21 @@ class VBAWatcher:
                 recursive=True  # Watch subdirectories for multi-document support
             )
             self.observer.start()
-            
+
             print(f"\n👁️  Watching directory: {self.watch_directory}")
             print("💾 Save files in VS Code (Ctrl+S) to synchronize them to Visio")
             print("⏸️  Press Ctrl+C to stop...\n")
-            
+
             if self.bidirectional and self.exporter:
                 print("🔄 Bidirectional sync: Changes in Visio are automatically exported to VS Code.")
                 if self.debug:
                     print("[DEBUG] Debug mode enabled\n")
                 self._start_polling()
-            
+
             # Main loop
             while not self.shutdown_requested:
                 time.sleep(1)
-                
+
         except KeyboardInterrupt:
             self._handle_shutdown(None, None)
         except Exception as e:
@@ -342,11 +354,11 @@ class VBAWatcher:
                 import traceback
                 traceback.print_exc()
             self.stop()
-    
+
     def stop(self):
         """Stop watcher and clean up resources"""
         self.shutdown_requested = True
-        
+
         # Stop polling timer
         if self.smart_poll_timer:
             try:
@@ -356,7 +368,7 @@ class VBAWatcher:
             except Exception as e:
                 if self.debug:
                     print(f"[DEBUG] Error cancelling timer: {e}")
-        
+
         # Stop observer
         if self.observer:
             try:
@@ -367,7 +379,7 @@ class VBAWatcher:
             except Exception as e:
                 if self.debug:
                     print(f"[DEBUG] Error stopping observer: {e}")
-        
+
         print("✓ Monitoring stopped")
         if self.bidirectional:
             print("✓ Polling stopped")

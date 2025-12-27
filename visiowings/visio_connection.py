@@ -1,7 +1,8 @@
 """Helper functions for Visio COM connection"""
 
-import win32com.client
 from pathlib import Path
+
+import win32com.client
 
 
 def get_visio_app():
@@ -16,11 +17,11 @@ def get_visio_app():
 def find_open_document(visio_app, file_path):
     """Sucht ein geöffnetes Dokument anhand des Pfads"""
     file_path = Path(file_path).resolve()
-    
+
     for doc in visio_app.Documents:
         if Path(doc.FullName).resolve() == file_path:
             return doc
-    
+
     return None
 
 

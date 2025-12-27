@@ -19,7 +19,7 @@ varies by locale:
 DEFAULT_CODEPAGE = 'cp1252'
 
 # Based on Windows NLS (National Language Support) defaults
-""" 
+"""
 LCID_TO_CODEPAGE maps Windows Locale IDs (LCIDs) to their default ANSI codepages.
 
 Structure:
@@ -64,7 +64,7 @@ LCID_TO_CODEPAGE = {
     1027: 'cp1252',  # ca-ES
     1069: 'cp1252',  # eu-ES (Basque)
     1110: 'cp1252',  # gl-ES (Galician)
-    
+
     # Central European (cp1250)
     1045: 'cp1250',  # pl-PL
     1029: 'cp1250',  # cs-CZ
@@ -75,7 +75,7 @@ LCID_TO_CODEPAGE = {
     2074: 'cp1250',  # sr-Latn-CS
     1048: 'cp1250',  # ro-RO
     1052: 'cp1250',  # sq-AL (Albanian)
-    
+
     # Cyrillic (cp1251)
     1049: 'cp1251',  # ru-RU
     1058: 'cp1251',  # uk-UA
@@ -90,17 +90,17 @@ LCID_TO_CODEPAGE = {
     1088: 'cp1251',  # ky-KG
     1092: 'cp1251',  # tt-RU
     1104: 'cp1251',  # mn-MN
-    
+
     # Greek (cp1253)
     1032: 'cp1253',  # el-GR
-    
+
     # Turkish (cp1254)
     1055: 'cp1254',  # tr-TR
     1068: 'cp1254',  # az-Latn-AZ
-    
+
     # Hebrew (cp1255)
     1037: 'cp1255',  # he-IL
-    
+
     # Arabic (cp1256)
     1025: 'cp1256',  # ar-SA
     5121: 'cp1256',  # ar-DZ
@@ -120,28 +120,28 @@ LCID_TO_CODEPAGE = {
     9217: 'cp1256',  # ar-YE
     1065: 'cp1256',  # fa-IR (Persian/Farsi)
     1056: 'cp1256',  # ur-PK (Urdu)
-    
+
     # Baltic (cp1257)
     1063: 'cp1257',  # lt-LT
     1062: 'cp1257',  # lv-LV
     1061: 'cp1257',  # et-EE
-    
+
     # Vietnamese (cp1258)
     1066: 'cp1258',  # vi-VN
-    
+
     # Thai (cp874)
     1054: 'cp874',   # th-TH
-    
+
     # Japanese (cp932 / Shift-JIS)
     1041: 'cp932',   # ja-JP
-    
+
     # Simplified Chinese (cp936 / GBK)
     2052: 'cp936',   # zh-CN
     4100: 'cp936',   # zh-SG
-    
+
     # Korean (cp949)
     1042: 'cp949',   # ko-KR
-    
+
     # Traditional Chinese (cp950 / Big5)
     1028: 'cp950',   # zh-TW
     3076: 'cp950',   # zh-HK
@@ -150,15 +150,15 @@ LCID_TO_CODEPAGE = {
 
 def get_encoding_from_document(document, debug=False):
     """Detect the appropriate encoding from Visio document's language property.
-    
-    Uses Document.Language which returns the language ID recorded in the 
+
+    Uses Document.Language which returns the language ID recorded in the
     document's VERSIONINFO resource - i.e., the language the document was
     created with.
-    
+
     Args:
         document: Visio Document COM object
         debug: If True, print debug information
-        
+
     Returns:
         Encoding string (e.g., 'cp1251', 'cp1252') or None if detection fails.
     """
@@ -166,7 +166,7 @@ def get_encoding_from_document(document, debug=False):
         lcid = document.Language
         if debug:
             print(f"[DEBUG] Document Language LCID: {lcid}")
-        
+
         encoding = LCID_TO_CODEPAGE.get(lcid)
         if encoding and debug:
             print(f"[DEBUG] Detected encoding from document language: {encoding}")
@@ -174,24 +174,24 @@ def get_encoding_from_document(document, debug=False):
     except Exception as e:
         if debug:
             print(f"[DEBUG] Could not get Document.Language: {e}")
-    
+
     return None
 
 
 
 def resolve_encoding(document, user_codepage=None, debug=False):
     """Resolve the encoding to use for VBA files.
-    
+
     Priority order:
     1. User-specified encoding (if provided)
     2. Auto-detected from Document's language property
     3. System default encoding
-    
+
     Args:
         document: Visio Document COM object
         user_codepage: User-specified encoding string (optional)
         debug: If True, print debug information
-        
+
     Returns:
         Encoding string (e.g., 'cp1251', 'cp1252').
     """
@@ -200,12 +200,12 @@ def resolve_encoding(document, user_codepage=None, debug=False):
         if debug:
             print(f"[DEBUG] Using user-specified encoding: {user_codepage}")
         return user_codepage
-    
+
     # Auto-detect from document language
     if document:
         detected = get_encoding_from_document(document, debug)
         if detected:
             return detected
-    
+
     # Fall back to system default
     return DEFAULT_CODEPAGE
