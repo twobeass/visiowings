@@ -102,28 +102,14 @@ def cmd_import(args):
     codepage = getattr(args, 'codepage', None)
 
     importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, user_codepage=codepage)
-    if importer.connect_to_visio():
-        imported_count = 0
 
-        # Import from root directory (backward compatibility)
-        for ext in ['*.bas', '*.cls', '*.frm']:
-            for file in input_dir.glob(ext):
-                if importer.import_module(file):
-                    imported_count += 1
+    # Use new batch import method
+    imported_count = importer.import_modules_from_dir(input_dir)
 
-        # Import from subdirectories (multi-document support)
-        for doc_folder in importer.get_document_folders():
-            doc_dir = input_dir / doc_folder
-            if doc_dir.exists() and doc_dir.is_dir():
-                for ext in ['*.bas', '*.cls', '*.frm']:
-                    for file in doc_dir.glob(ext):
-                        if importer.import_module(file):
-                            imported_count += 1
-
-        if imported_count > 0:
-            print(f"\n✓ {imported_count} modules imported")
-        else:
-            print("\n⚠️  No modules found or imported")
+    if imported_count > 0:
+        print(f"\n✓ {imported_count} modules imported")
+    else:
+        print("\n⚠️  No modules imported (or all skipped)")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -197,6 +183,13 @@ def main():
         '--codepage', '--cp',
         help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
     )
+
+    # If no arguments are passed, start interactive menu
+    import sys
+    if len(sys.argv) == 1:
+        from .interactive import interactive_menu
+        interactive_menu()
+        return
 
     args = parser.parse_args()
 
