@@ -1,12 +1,14 @@
-import win32com.client
-import pythoncom
-from pathlib import Path
-import re
-import sys
+import hashlib
 import os
-from .document_manager import VisioDocumentManager
-from .encoding import resolve_encoding, DEFAULT_CODEPAGE
+import re
 from difflib import unified_diff
+from pathlib import Path
+
+import pythoncom
+
+from .document_manager import VisioDocumentManager
+from .encoding import DEFAULT_CODEPAGE, resolve_encoding
+
 
 class VisioVBAImporter:
     def __init__(self, visio_file_path, force_document=False, debug=False, silent_reconnect=False, always_yes=False, user_codepage=None):
@@ -27,7 +29,7 @@ class VisioVBAImporter:
             pythoncom.CoInitialize()
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] COM already initialized: {e}")
+                print(f"[DEBUG] COM already initialized: {type(e).__name__}: {e}")
         self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
         if not self.doc_manager.connect_to_visio():
             return False
@@ -36,14 +38,14 @@ class VisioVBAImporter:
         if not self.doc:
             print("❌ Failed to connect to main document")
             return False
-        
+
         # Resolve encoding (user-specified > document language)
         self.codepage = resolve_encoding(
             document=self.doc,
             user_codepage=self.user_codepage,
             debug=self.debug
         )
-        
+
         for doc_info in self.doc_manager.get_all_documents_with_vba():
             self.document_map[doc_info.folder_name] = doc_info
         if self.debug:
@@ -56,7 +58,7 @@ class VisioVBAImporter:
             return True
         except Exception as e:
             if self.debug and not self.silent_reconnect:
-                print(f"[DEBUG] Connection lost ({e}), attempting to reconnect...")
+                print(f"[DEBUG] Connection lost ({type(e).__name__}: {e}), attempting to reconnect...")
             elif not self.debug and not self.silent_reconnect:
                 print("🔄 Connection lost, attempting to reconnect...")
             return self.connect_to_visio()
@@ -72,11 +74,12 @@ class VisioVBAImporter:
                 print(f"[DEBUG] File {file_path.name} belongs to document: {parent_dir}")
             return self.document_map[parent_dir]
         else:
-            print(
-                f"⚠️  No open Visio document found for folder '{parent_dir}'; "
-                f"skipping import of '{file_path.name}' from this folder!"
-            )
-            return None
+            # Fallback for root files (legacy single-document support)
+            # If the file is in the root import dir (parent isn't in map), assign to main doc
+            # But only if we are in single-doc mode or explicit root import
+            if self.debug:
+                print(f"[DEBUG] No folder match for {file_path.name}, attempting main doc fallback")
+            return self.doc_manager.get_main_document()
 
     def _create_temp_codepage_file(self, file_path, codepage):
         """Create a temporary file with configured encoding for VBA import."""
@@ -98,7 +101,7 @@ class VisioVBAImporter:
             if self.debug:
                 print(f"[DEBUG] Created temp {codepage.upper()} file: {temp_path}")
             return temp_path
-        except UnicodeEncodeError as e:
+        except UnicodeEncodeError:
             print(f"⚠️  Warning: {file_path.name} contains characters not supported in {codepage.upper()}")
             with os.fdopen(fd, 'w', encoding=codepage, errors='replace') as f:
                 f.write(text)
@@ -109,16 +112,17 @@ class VisioVBAImporter:
             raise
 
     def import_module(self, file_path, edit_mode=False):
+        """Import a single module. Used by file watcher."""
         com_initialized = False
         temp_file = None
         try:
             pythoncom.CoInitialize()
             com_initialized = True
             if self.debug:
-                print(f"[DEBUG] COM initialized for import_module thread")
+                print("[DEBUG] COM initialized for import_module thread")
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] COM already initialized in this thread: {e}")
+                print(f"[DEBUG] COM already initialized in this thread: {type(e).__name__}: {e}")
         try:
             if not self.connect_to_visio():
                 print("⚠️  No connection to Visio - make sure the document is open")
@@ -137,34 +141,29 @@ class VisioVBAImporter:
                 if comp.Name == module_name:
                     component = comp
                     break
+
+            # Special handling for Document modules
             if component and component.Type == 100:
                 if self.force_document:
-                    try:
-                        code = file_path.read_text(encoding="utf-8")
-                    except Exception:
-                        code = file_path.read_text(encoding=self.codepage, errors='replace')
-                    code = self._strip_vba_header(code)
-                    cm = component.CodeModule
-                    if cm.CountOfLines > 0:
-                        cm.DeleteLines(1, cm.CountOfLines)
-                    if code.strip():
-                        cm.AddFromString(code)
+                    self._import_document_module_content(component, file_path)
                     print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name} (force)")
                     return True
                 else:
                     print(f"⚠️  Document module '{module_name}' skipped without --force.")
                     return False
+
             if component:
                 if not self._prompt_overwrite(module_name, file_path, component, edit_mode=edit_mode):
                     print(f"⊘ Skipped: {module_name}")
                     return False
                 vb_project.VBComponents.Remove(component)
+
             temp_file = self._create_temp_codepage_file(file_path, self.codepage)
             vb_project.VBComponents.Import(str(temp_file))
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
         except Exception as e:
-            print(f"✗ Error importing {file_path}: {e}")
+            print(f"✗ Error importing {file_path}: {type(e).__name__}: {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
@@ -177,15 +176,15 @@ class VisioVBAImporter:
                         print(f"[DEBUG] Cleaned up temp file: {temp_file}")
                 except Exception as e:
                     if self.debug:
-                        print(f"[DEBUG] Error cleaning temp file: {e}")
+                        print(f"[DEBUG] Error cleaning temp file: {type(e).__name__}: {e}")
             if com_initialized:
                 try:
                     pythoncom.CoUninitialize()
                     if self.debug:
-                        print(f"[DEBUG] COM uninitialized for import_module thread")
+                        print("[DEBUG] COM uninitialized for import_module thread")
                 except Exception as e:
                     if self.debug:
-                        print(f"[DEBUG] Error uninitializing COM: {e}")
+                        print(f"[DEBUG] Error uninitializing COM: {type(e).__name__}: {e}")
 
     def get_document_folders(self):
         """Return list of document folder names detected for import/export mapping."""
@@ -201,24 +200,6 @@ class VisioVBAImporter:
             return "form"
         return "unknown"
 
-    def _repair_vba_module_file(self, file_path):
-        # Only repair .bas headers. Do not touch .cls/.frm content.
-        ext = file_path.suffix.lower()
-        if ext != '.bas':
-            return True
-        try:
-            text = file_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            text = file_path.read_text(encoding=self.codepage)
-        module_name = file_path.stem
-        header = f'Attribute VB_Name = "{module_name}"\nOption Explicit\n'
-        if "Attribute VB_Name" not in text:
-            text = header + text
-        if text and not text.endswith("\n"):
-            text += "\n"
-        file_path.write_text(text, encoding=self.codepage, errors='replace')
-        return True
-
     def _read_module_code(self, file_path):
         try:
             return file_path.read_text(encoding="utf-8")
@@ -230,38 +211,38 @@ class VisioVBAImporter:
 
     def _strip_vba_header(self, code, keep_vb_name=False):
         """Strip VBA headers with proper handling of classes and forms.
-        
+
         This function removes VBA IDE metadata while preserving actual code:
         - VERSION lines
         - BEGIN...End blocks (including nested blocks in forms/classes)
         - MultiUse declarations
         - Attribute lines (except VB_Name when keep_vb_name=True)
-        
+
         Args:
             code: VBA code text to process
             keep_vb_name: If True, preserves Attribute VB_Name line
-            
+
         Returns:
             Cleaned VBA code with headers removed
         """
         lines = code.splitlines()
         filtered_lines = []
         begin_depth = 0  # Track nesting depth of BEGIN blocks
-        
+
         # VBA code keywords that end with 'End' (case-insensitive)
         code_end_keywords = {
-            'end sub', 'end function', 'end property', 'end if', 
+            'end sub', 'end function', 'end property', 'end if',
             'end with', 'end select', 'end type', 'end enum'
         }
-        
+
         for line in lines:
             s = line.strip()
             s_lower = s.lower()
-            
+
             # Remove VERSION lines
             if s.upper().startswith('VERSION'):
                 continue
-            
+
             # Detect BEGIN block start (with any parameters)
             # Matches: BEGIN, BEGIN VB.Form, BEGIN {GUID} ControlName, etc.
             if re.match(r'^BEGIN\s+', s, re.IGNORECASE) or s_lower == 'begin':
@@ -269,46 +250,92 @@ class VisioVBAImporter:
                 if self.debug:
                     print(f"[DEBUG] BEGIN detected (depth={begin_depth}): {s[:50]}")
                 continue
-            
+
             # Detect END of BEGIN block
             # Must be standalone 'End' or 'End Begin', not 'End Sub', 'End Function', etc.
             if begin_depth > 0:
                 # Check if this is a block terminator END (not a code keyword)
                 is_block_end = (
-                    s_lower == 'end' or 
+                    s_lower == 'end' or
                     s_lower == 'end begin' or
-                    (s_lower.startswith('end ') and s_lower not in code_end_keywords and 
+                    (s_lower.startswith('end ') and s_lower not in code_end_keywords and
                      not any(s_lower.startswith(kw) for kw in code_end_keywords))
                 )
-                
+
                 if is_block_end:
                     begin_depth -= 1
                     if self.debug:
                         print(f"[DEBUG] END detected (depth={begin_depth}): {s[:50]}")
                     continue
-            
+
             # Skip everything inside BEGIN...End blocks
             if begin_depth > 0:
                 continue
-            
+
             # Remove standalone MultiUse lines (outside blocks)
             if s_lower.startswith('multiuse'):
                 continue
-            
+
             # Handle Attribute lines
             if s.startswith('Attribute '):
                 if keep_vb_name and 'VB_Name' in line:
                     filtered_lines.append(line)
                 continue
-            
+
             # Keep all other lines (actual code)
             filtered_lines.append(line)
-        
+
         if self.debug and begin_depth != 0:
             print(f"[DEBUG] Warning: Unbalanced BEGIN/End blocks (final depth={begin_depth})")
-        
+
         return '\n'.join(filtered_lines)
 
+    def _normalize_content(self, content):
+        """Normalize content for comparison by removing insignificant differences"""
+        # Split into lines
+        lines = content.splitlines()
+
+        # Strip trailing whitespace from each line and remove empty lines at start/end
+        normalized_lines = [line.rstrip() for line in lines]
+
+        # Remove leading empty lines
+        while normalized_lines and not normalized_lines[0]:
+            normalized_lines.pop(0)
+
+        # Remove trailing empty lines
+        while normalized_lines and not normalized_lines[-1]:
+            normalized_lines.pop()
+
+        # Join with consistent line ending
+        return '\n'.join(normalized_lines)
+
+    def _compare_module_content(self, file_path, component):
+        """Compare local file with Visio module content using normalization.
+        Returns: (are_different, local_hash, visio_hash)
+        """
+        try:
+            file_code = self._read_module_code(file_path)
+            visio_code = component.CodeModule.Lines(1, component.CodeModule.CountOfLines) if component.CodeModule.CountOfLines > 0 else ""
+
+            # Normalize both: strip ALL headers for fair comparison
+            file_normalized = self._strip_vba_header(file_code, keep_vb_name=False)
+            visio_normalized = self._strip_vba_header(visio_code, keep_vb_name=False)
+
+            # Further normalize whitespace
+            file_final = self._normalize_content(file_normalized)
+            visio_final = self._normalize_content(visio_normalized)
+
+            # Calculate hashes
+            local_hash = hashlib.md5(file_final.encode()).hexdigest()[:8]
+            visio_hash = hashlib.md5(visio_final.encode()).hexdigest()[:8]
+
+            are_different = file_final != visio_final
+
+            return are_different, local_hash, visio_hash
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Error comparing {file_path.name}: {type(e).__name__}: {e}")
+            return True, None, None
 
     def _prompt_overwrite(self, module_name, file_path, comp, edit_mode=False):
         """Compare module content, ignoring ALL Attribute differences for comparison"""
@@ -316,96 +343,197 @@ class VisioVBAImporter:
             print(f"[DEBUG] Overwrite prompt called, edit_mode={edit_mode}")
         if edit_mode:
             return True  # Always overwrite in edit mode, don't prompt
-        
+
+        are_different, _, _ = self._compare_module_content(file_path, comp)
+
+        if not are_different or self.always_yes:
+            return True
+
+        print(f"\n⚠️  Module '{module_name}' differs from Visio. See diff below:")
+
+        # Show nice diff
         file_code = self._read_module_code(file_path)
         visio_code = comp.CodeModule.Lines(1, comp.CodeModule.CountOfLines) if comp.CodeModule.CountOfLines > 0 else ""
-        
-        # Normalize both: strip ALL headers for fair comparison
         file_normalized = self._strip_vba_header(file_code, keep_vb_name=False)
         visio_normalized = self._strip_vba_header(visio_code, keep_vb_name=False)
-        
-        if file_normalized.strip() == visio_normalized.strip() or self.always_yes:
-            return True
-        
-        print(f"\n⚠️  Module '{module_name}' differs from Visio. See diff below:")
+
         for line in unified_diff(
-            visio_normalized.splitlines(), 
-            file_normalized.splitlines(), 
-            fromfile='Visio', 
-            tofile='Disk', 
+            visio_normalized.splitlines(),
+            file_normalized.splitlines(),
+            fromfile='Visio',
+            tofile='Disk',
             lineterm=''
         ):
             print(line)
-        
-        print(f"Overwrite module '{module_name}' in Visio with disk version? (y/N): ", end="")
+
+        print(f"Overwrite module '{module_name}' in Visio with disk version? (y/N/a): ", end="")
         ans = input().strip().lower()
+
+        if ans in ("a", "all"):
+            self.always_yes = True
+            return True
+
         return ans in ("y", "yes")
 
+    def _import_document_module_content(self, component, file_path):
+        """Helper to overwrite document module content"""
+        try:
+            code = file_path.read_text(encoding="utf-8")
+        except Exception:
+            code = file_path.read_text(encoding=self.codepage, errors='replace')
 
+        code = self._strip_vba_header(code)
+        cm = component.CodeModule
+        if cm.CountOfLines > 0:
+            cm.DeleteLines(1, cm.CountOfLines)
+        if code.strip():
+            cm.AddFromString(code)
 
-    def import_directory(self, input_dir):
+    def import_modules_from_dir(self, input_dir):
+        """Batch import all modules from directory with conflict checking"""
+        if not self.connect_to_visio():
+            return 0
+
         input_dir = Path(input_dir)
-        dirs = [d for d in input_dir.iterdir() if d.is_dir()]
-        if not dirs:
-            dirs = [input_dir]
-        for doc_dir in dirs:
-            structure = {
-                "Modules": [],
-                "Classes": [],
-                "Forms": [],
-                "VisioObjects": [],
-                "root": []
-            }
-            for subdir in doc_dir.iterdir():
-                if not subdir.is_dir():
-                    continue
-                if subdir.name.lower() in ("modules", "classes", "forms", "visioobjects"):
-                    structure[subdir.name.capitalize()].extend(subdir.glob("*.*"))
-            for f in doc_dir.glob("*.bas"):
-                structure["Modules"].append(f)
-            for f in doc_dir.glob("*.cls"):
-                if f.parent.name.lower() != "visioobjects":
-                    structure["Classes"].append(f)
-                else:
-                    structure["VisioObjects"].append(f)
-            for f in doc_dir.glob("*.frm"):
-                structure["Forms"].append(f)
-            for group in ("Modules", "Classes", "Forms", "VisioObjects"):
-                for file_path in structure[group]:
-                    module_type = self._module_type_from_ext(file_path)
-                    module_name = file_path.stem
-                    doc_info = self.document_map.get(doc_dir.name.lower())
-                    if not doc_info:
-                        print(f"❌ No document found for folder '{doc_dir.name}'")
-                        continue
-                    vb_project = doc_info.doc.VBProject
-                    target_comp = None
-                    for comp in vb_project.VBComponents:
-                        if comp.Name == module_name:
-                            target_comp = comp
-                            break
-                    if target_comp is not None and group != "VisioObjects":
-                        if not self._prompt_overwrite(module_name, file_path, target_comp):
-                            print(f"⊘ Skipped: {module_name}")
-                            continue
-                        vb_project.VBComponents.Remove(target_comp)
-                    if group == "VisioObjects" and target_comp is not None and not self.force_document:
-                        print(f"⚠️  Document module '{module_name}' skipped without --force.")
-                        continue
-                    self._repair_vba_module_file(file_path)
-                    try:
-                        orig_code = self._read_module_code(file_path)
-                        # Strip headers for current import, preserving End Sub, End Function, etc
-                        clean_code = self._strip_vba_header(orig_code)
-                        file_path.write_text(clean_code, encoding=self.codepage, errors='replace')
-                        vb_project.VBComponents.Import(str(file_path))
-                        print(f"✓ Imported: {doc_dir.name}/{group}/{module_name}")
-                    except Exception as e:
-                        if group == "VisioObjects" and self.force_document and target_comp is not None:
-                            code = self._read_module_code(file_path)
-                            cm = target_comp.CodeModule
-                            cm.DeleteLines(1, cm.CountOfLines)
-                            cm.AddFromString(code)
-                            print(f"✓ Imported: {doc_dir.name}/{group}/{module_name} (force)")
+        documents_to_process = {}
+
+        # 1. Discovery Phase
+        # Find all candidate files
+        candidate_files = []
+        for ext in ['*.bas', '*.cls', '*.frm']:
+            candidate_files.extend(input_dir.glob(ext)) # Root files
+            for doc_folder in self.get_document_folders():
+                 candidate_files.extend((input_dir / doc_folder).glob(ext)) # Subdir files
+
+        # Map files to documents
+        for file_path in candidate_files:
+            doc_info = self._find_document_for_file(file_path)
+            if doc_info:
+                if doc_info.folder_name not in documents_to_process:
+                    documents_to_process[doc_info.folder_name] = {
+                        'doc_info': doc_info,
+                        'files': []
+                    }
+                documents_to_process[doc_info.folder_name]['files'].append(file_path)
+
+        total_imported = 0
+
+        # 2. Process each document
+        for doc_folder, data in documents_to_process.items():
+            doc_info = data['doc_info']
+            files = data['files']
+            vb_project = doc_info.doc.VBProject
+
+            files_with_changes = {}
+            files_to_import = []
+
+            # Check for conflicts
+            for file_path in files:
+                module_name = file_path.stem
+                component = None
+                for comp in vb_project.VBComponents:
+                    if comp.Name == module_name:
+                        component = comp
+                        break
+
+                if component:
+                    if component.Type == 100: # Document module
+                        if self.force_document:
+                            files_to_import.append((file_path, component, True)) # True = is_doc_mod
                         else:
-                            print(f"❌ Failed to import {module_name}: {e}")
+                            print(f"⚠️  Document module '{module_name}' skipped without --force.")
+                    else:
+                        are_different, _, _ = self._compare_module_content(file_path, component)
+                        if are_different:
+                             files_with_changes[module_name] = {
+                                'path': file_path,
+                                'component': component
+                             }
+                        else:
+                             # No changes, but we might want to "refresh" it?
+                             # Usually if identical, we skip to save time/risk, unless specifically requested?
+                             # Export skips identical. Import should likely skip identical too unless we are strictly overwriting.
+                             # But let's assume if it's identical we skip it for safety/speed.
+                             pass
+                else:
+                    # New module
+                    files_to_import.append((file_path, None, False))
+
+            # Handle conflicts
+            if files_with_changes:
+                print(f"\n⚠️  Local changes detected in {doc_info.name} (Importing to Visio):")
+                for fname in files_with_changes.keys():
+                    print(f"   - {doc_info.folder_name}/{fname}")
+
+                print("\nOptions:")
+                print("  o - Overwrite all in Visio with local content")
+                print("  s - Skip changed files (keep Visio content)")
+                print("  i - Interactive (choose per file)")
+                print("  c - Cancel import for this document")
+
+                response = input("\nChoose action (o/s/i/C): ").strip().lower()
+
+                if response == 'o':
+                    # Overwrite all
+                    print(f"✓ Will overwrite {len(files_with_changes)} file(s)")
+                    for fname, info in files_with_changes.items():
+                         files_to_import.append((info['path'], info['component'], False))
+
+                elif response == 's':
+                    # Skip all
+                    print(f"✓ Will skip {len(files_with_changes)} changed file(s)")
+
+                elif response == 'i':
+                    # Interactive
+                     for fname, info in files_with_changes.items():
+                        print(f"\n{doc_info.folder_name}/{fname}")
+
+                        # Show diff
+                        file_code = self._read_module_code(info['path'])
+                        visio_code = info['component'].CodeModule.Lines(1, info['component'].CodeModule.CountOfLines)
+
+                        file_normalized = self._strip_vba_header(file_code, keep_vb_name=False)
+                        visio_normalized = self._strip_vba_header(visio_code, keep_vb_name=False)
+
+                        for line in unified_diff(
+                            visio_normalized.splitlines(),
+                            file_normalized.splitlines(),
+                            fromfile='Visio',
+                            tofile='Disk',
+                            lineterm=''
+                        ):
+                            print(line)
+
+                        choice = input("  Overwrite Visio module? (y/N): ").strip().lower()
+                        if choice in ('y', 'yes'):
+                             files_to_import.append((info['path'], info['component'], False))
+                else:
+                    print(f"❌ Import cancelled for {doc_info.name}")
+                    continue
+
+            # Execute Imports
+            for file_path, component, is_doc_mod in files_to_import:
+                try:
+                    if is_doc_mod:
+                        self._import_document_module_content(component, file_path)
+                        print(f"✓ Imported: {doc_info.folder_name}/{file_path.name} (force)")
+                    else:
+                        if component:
+                            vb_project.VBComponents.Remove(component)
+
+                        temp_file = self._create_temp_codepage_file(file_path, self.codepage)
+                        vb_project.VBComponents.Import(str(temp_file))
+
+                        # Clean up
+                        if temp_file and temp_file != str(file_path):
+                            try:
+                                os.unlink(temp_file)
+                            except Exception:
+                                pass
+
+                        print(f"✓ Imported: {doc_info.folder_name}/{file_path.name}")
+                    total_imported += 1
+                except Exception as e:
+                    print(f"✗ Error importing {file_path.name}: {type(e).__name__}: {e}")
+
+        return total_imported
