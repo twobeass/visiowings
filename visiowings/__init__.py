@@ -1,6 +1,6 @@
 """visiowings - VBA Editor for Microsoft Visio"""
 
-__version__ = '0.3.1'
+__version__ = '0.6
 __author__ = 'twobeass'
 
 from .file_watcher import VBAWatcher
