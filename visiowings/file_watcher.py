@@ -110,7 +110,8 @@ class VBAFileHandler(FileSystemEventHandler):
                 return
 
             module_name = file_path.stem
-            importer_threadlocal = VisioVBAImporter(self.importer.visio_file_path, debug=self.debug)
+            use_rubberduck = getattr(self.importer, 'use_rubberduck', False)
+            importer_threadlocal = VisioVBAImporter(self.importer.visio_file_path, debug=self.debug, use_rubberduck=use_rubberduck)
 
             if not importer_threadlocal.connect_to_visio():
                 print("⚠️  Could not connect to Visio for module removal.")
@@ -238,7 +239,8 @@ class VBAWatcher:
             from .vba_export import VisioVBAExporter
             from .vba_import import VisioVBAImporter
 
-            local_importer = VisioVBAImporter(getattr(self.importer, 'visio_file_path', None), debug=self.debug)
+            use_rubberduck = getattr(self.importer, 'use_rubberduck', False)
+            local_importer = VisioVBAImporter(getattr(self.importer, 'visio_file_path', None), debug=self.debug, use_rubberduck=use_rubberduck)
 
             if not local_importer.connect_to_visio():
                 if self.debug:
@@ -253,7 +255,7 @@ class VBAWatcher:
                 self._pause_observer()
 
                 try:
-                    thread_exporter = VisioVBAExporter(str(local_importer.visio_file_path), debug=self.debug)
+                    thread_exporter = VisioVBAExporter(str(local_importer.visio_file_path), debug=self.debug, use_rubberduck=use_rubberduck)
 
                     if thread_exporter.connect_to_visio(silent=True):
                         all_exported, all_hashes = thread_exporter.export_modules(

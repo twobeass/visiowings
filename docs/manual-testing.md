@@ -183,6 +183,21 @@ This manual testing guide provides comprehensive, step-by-step instructions to v
 **Expected:**
 - All files/folders processed and associated correctly, regardless of name complexity.
 
+### 12. Rubberduck Integration
+**Goal:** Verify directory structure export/import with Rubberduck annotations
+
+#### Steps:
+1. In a VBA module, add `'@Folder("Parent.Child")` annotation.
+2. Run export with flag: `visiowings export ... --rd`.
+3. Verify file is exported to `output/Parent/Child/Module.bas`.
+4. Move a file to a new subfolder locally (e.g. `output/NewFolder/Module.bas`).
+5. Run import with flag: `visiowings import ... --rd`.
+6. Verify imported code in Visio contains `'@Folder("NewFolder")`.
+
+**Expected:**
+- Files move to folders based on annotations (export).
+- Annotations update based on folders (import).
+
 ---
 
 ## How to Report Issues

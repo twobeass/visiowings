@@ -6,6 +6,7 @@ Fixed: Proper VBA header handling for classes and forms with nested BEGIN blocks
 """
 import difflib
 import hashlib
+import os
 import re
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from .encoding import DEFAULT_CODEPAGE, resolve_encoding
 
 
 class VisioVBAExporter:
-    def __init__(self, visio_file_path, debug=False, user_codepage=None):
+    def __init__(self, visio_file_path, debug=False, user_codepage=None, use_rubberduck=False):
         self.visio_file_path = visio_file_path
         self.visio_app = None
         self.doc = None
@@ -22,6 +23,7 @@ class VisioVBAExporter:
         self.doc_manager = None
         self.user_codepage = user_codepage
         self.codepage = DEFAULT_CODEPAGE
+        self.use_rubberduck = use_rubberduck
 
     def connect_to_visio(self, silent=False):
         try:
@@ -64,6 +66,15 @@ class VisioVBAExporter:
 
         # Join with consistent line ending
         return '\n'.join(normalized_lines)
+
+    def _extract_folder_annotation(self, content):
+        """Extract folder path from Rubberduck @Folder annotation"""
+        # Matches '@Folder("Path") with flexibility, expecting comment prefix
+        match = re.search(r"'\s*@Folder\s*\(\s*\"([^\"]+)\"\s*\)", content)
+        if match:
+            # Convert dot notation to path path (e.g. "Main.Sub" -> "Main/Sub")
+            return match.group(1).replace('.', '/')
+        return None
 
     def _strip_vba_header_export(self, text, keep_vb_name=True):
         """Strip VBA headers with proper handling of classes and forms.
@@ -242,37 +253,41 @@ class VisioVBAExporter:
                 if self.debug:
                     print(f"[DEBUG] {doc_info.name}: Hashes identical - no export")
                 # Even if no export, check if Visio modules were deleted!
+                # Note: When checking for deleted modules in RD mode without export,
+                # we don't have the list of "current" export locations, so we might need
+                # to do a full scan or just skip complex delete logic when hash matches.
+                # For now, we will do a best effort scan.
                 self._sync_deleted_modules(doc_info, output_dir, vb_project)
                 return [], current_hash
 
-            doc_output_path = Path(output_dir) / doc_info.folder_name
-            doc_output_path.mkdir(parents=True, exist_ok=True)
+            doc_root_path = Path(output_dir) / doc_info.folder_name
+            doc_root_path.mkdir(parents=True, exist_ok=True)
 
-            # Check for files with local changes
-            files_with_changes = {}
             ext_map = {1: '.bas', 2: '.cls', 3: '.frm', 100: '.cls'}
-            for file_name, file_path, visio_clean, local_clean in files_with_changes:
-                print(f"\n⚠️  File differs: {file_name}")
-                diff_lines = list(
-                    difflib.unified_diff(
-                        local_clean.splitlines(),
-                        visio_clean.splitlines(),
-                        fromfile='Local',
-                        tofile='Visio',
-                        lineterm=''
-                    )
-                )
-                if diff_lines:
-                    print('\n'.join(diff_lines))
-                response = input(f"Overwrite local file '{file_name}' with Visio content? (y/N): ").strip().lower()
-                if response not in ('y', 'yes'):
-                    print(f"⊘ Skipped: {file_name}")
-                    continue
+            files_with_changes = {}
 
+            # First pass: determine where each file SHOULD go (for conflict checking)
+            component_targets = {}
             for component in vb_project.VBComponents:
                 ext = ext_map.get(component.Type, '.bas')
                 file_name = f"{component.Name}{ext}"
-                file_path = doc_output_path / file_name
+                target_folder = doc_root_path
+
+                if self.use_rubberduck:
+                    # We need to peek at the content to find the folder
+                    # Use the CodeModule to get lines
+                    if component.CodeModule.CountOfLines > 0:
+                        content = component.CodeModule.Lines(1, component.CodeModule.CountOfLines)
+                        folder_path = self._extract_folder_annotation(content)
+                        if folder_path:
+                            target_folder = doc_root_path / folder_path
+
+                target_path = target_folder / file_name
+                component_targets[component.Name] = target_path
+
+            # Check for files with local changes
+            for component in vb_project.VBComponents:
+                file_path = component_targets[component.Name]
 
                 # If file exists locally and is a code module, check for changes
                 if file_path.exists() and component.Type in [1, 2, 100]:
@@ -281,19 +296,21 @@ class VisioVBAExporter:
                     )
 
                     if are_different:
-                        files_with_changes[file_name] = {
+                        rel_path = file_path.relative_to(doc_root_path)
+                        files_with_changes[file_path.name] = { # Use filename as key for simplicity
                             'path': file_path,
                             'component': component,
                             'local_hash': local_hash,
-                            'visio_hash': visio_hash
+                            'visio_hash': visio_hash,
+                            'rel_path': rel_path
                         }
 
             # If there are files with local changes, handle them interactively
             files_to_skip = set()
             if files_with_changes:
                 print(f"\n⚠️  Local changes detected in {doc_info.name}:")
-                for fname in files_with_changes.keys():
-                    print(f"   - {doc_info.folder_name}/{fname}")
+                for fname, info in files_with_changes.items():
+                    print(f"   - {doc_info.folder_name}/{info['rel_path']}")
 
                 print("\nOptions:")
                 print("  o - Overwrite all with Visio content")
@@ -313,7 +330,7 @@ class VisioVBAExporter:
                 elif response == 'i':
                     # Interactive mode
                     for fname, info in files_with_changes.items():
-                        print(f"\n{doc_info.folder_name}/{fname}")
+                        print(f"\n{doc_info.folder_name}/{info['rel_path']}")
 
                         # Read local file and normalize WITHOUT VB_Name for fair comparison
                         local_content = info['path'].read_text(encoding="utf-8")
@@ -345,8 +362,6 @@ class VisioVBAExporter:
                         if choice not in ('y', 'yes'):
                             files_to_skip.add(fname)
 
-
-
                 else:
                     # Cancel (default)
                     print(f"❌ Export cancelled for {doc_info.name}")
@@ -354,20 +369,23 @@ class VisioVBAExporter:
 
             # Proceed with export
             exported_files = []
-            visio_module_names = set()
+            visio_module_names = set() # Kept for backward compat in sync_deleted, though less useful with full paths
+            exported_paths_set = set() # New set to track exact exported paths for cleanup
             skipped_count = 0
 
             for component in vb_project.VBComponents:
-                ext = ext_map.get(component.Type, '.bas')
-                file_name = f"{component.Name}{ext}"
-                file_path = doc_output_path / file_name
+                file_path = component_targets[component.Name]
+
+                # Ensure directory exists (important for RD mode)
+                file_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Skip if user chose to keep local changes
-                if file_name in files_to_skip:
+                if file_path.name in files_to_skip:
                     if self.debug:
-                        print(f"⊘ Skipped: {doc_info.folder_name}/{file_name} (local changes preserved)")
+                        print(f"⊘ Skipped: {doc_info.folder_name}/{file_path.relative_to(doc_root_path)} (local changes preserved)")
                     skipped_count += 1
                     visio_module_names.add(component.Name.lower())
+                    exported_paths_set.add(file_path.resolve())
                     continue
 
                 # Export the module
@@ -376,13 +394,17 @@ class VisioVBAExporter:
                     self._strip_and_convert(file_path)
                 exported_files.append(file_path)
                 visio_module_names.add(component.Name.lower())
-                print(f"✓ Exported: {doc_info.folder_name}/{file_name}")
+                exported_paths_set.add(file_path.resolve())
+
+                rel_path = file_path.relative_to(doc_root_path)
+                print(f"✓ Exported: {doc_info.folder_name}/{rel_path}")
 
             if skipped_count > 0:
                 print(f"ℹ️  Skipped {skipped_count} file(s) with local changes")
 
             # After export, sync deleted local files
-            self._sync_deleted_modules(doc_info, output_dir, vb_project, visio_module_names)
+            # We pass exported_paths_set to handle the structure aware cleanup
+            self._sync_deleted_modules(doc_info, output_dir, vb_project, visio_module_names, exported_paths_set)
 
             return exported_files, current_hash
         except Exception as e:
@@ -392,9 +414,11 @@ class VisioVBAExporter:
                 traceback.print_exc()
             return [], None
 
-    def _sync_deleted_modules(self, doc_info, output_dir, vb_project, visio_module_names=None):
+    def _sync_deleted_modules(self, doc_info, output_dir, vb_project, visio_module_names=None, exported_paths_set=None):
         doc_output_path = Path(output_dir) / doc_info.folder_name
-        local_files = list(doc_output_path.glob("*.bas")) + list(doc_output_path.glob("*.cls")) + list(doc_output_path.glob("*.frm"))
+
+        # Recursive glob to find all files even in subfolders (needed for RD mode)
+        local_files = list(doc_output_path.rglob("*.bas")) + list(doc_output_path.rglob("*.cls")) + list(doc_output_path.rglob("*.frm"))
 
         if visio_module_names is None:
             visio_module_names = {comp.Name.lower() for comp in vb_project.VBComponents}
@@ -402,15 +426,22 @@ class VisioVBAExporter:
         # Collect files to delete
         files_to_delete = []
         for file in local_files:
-            filename = file.stem.lower()
-            if filename not in visio_module_names:
-                files_to_delete.append(file)
+            # If we have exact exported paths, use that for precision (handles moves in RD mode)
+            if exported_paths_set is not None:
+                if file.resolve() not in exported_paths_set:
+                    files_to_delete.append(file)
+            else:
+                # Legacy fallback: check by filename only
+                filename = file.stem.lower()
+                if filename not in visio_module_names:
+                    files_to_delete.append(file)
 
         # If there are files to delete, ask user
         if files_to_delete:
-            print("\n⚠️  The following local files are missing in Visio:")
+            print("\n⚠️  The following local files are missing in Visio (or moved):")
             for file in files_to_delete:
-                print(f"   - {doc_info.folder_name}/{file.name}")
+                rel_path = file.relative_to(doc_output_path)
+                print(f"   - {doc_info.folder_name}/{rel_path}")
 
             print("\nOptions:")
             print("  d - Delete local files")
@@ -422,15 +453,27 @@ class VisioVBAExporter:
                 for file in files_to_delete:
                     try:
                         file.unlink()
-                        print(f"✓ Removed local file: {doc_info.folder_name}/{file.name}")
+                        rel_path = file.relative_to(doc_output_path)
+                        print(f"✓ Removed local file: {doc_info.folder_name}/{rel_path}")
                     except Exception as e:
                         print(f"⚠️  Could not remove local file: {file} ({e})")
+
+                # Cleanup empty directories
+                if self.use_rubberduck:
+                    for dirpath, dirnames, filenames in os.walk(doc_output_path, topdown=False):
+                         if not dirnames and not filenames and dirpath != str(doc_output_path):
+                             try:
+                                 os.rmdir(dirpath)
+                             except:
+                                 pass
+
             elif response == 'i':
                 print(f"\n📤 Importing {len(files_to_delete)} file(s) to Visio...")
                 for file in files_to_delete:
                     try:
                         vb_project.VBComponents.Import(str(file))
-                        print(f"✓ Imported to Visio: {doc_info.folder_name}/{file.name}")
+                        rel_path = file.relative_to(doc_output_path)
+                        print(f"✓ Imported to Visio: {doc_info.folder_name}/{rel_path}")
                     except Exception as e:
                         print(f"✗ Error importing {file.name}: {e}")
             else:

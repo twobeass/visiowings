@@ -80,6 +80,7 @@ class VisioDocumentInfo:
 
 **Key Responsibilities:**
 - Export VBA components from Visio VBProject
+- **Rubberduck Integration:** Parse `@Folder` annotations and map to directory structure
 - Strip VBA headers while preserving `Attribute VB_Name`
 - Convert encoding from cp1252 (Visio export) to UTF-8 (VS Code)
 - Normalize content for comparison (whitespace, line endings)
@@ -108,6 +109,7 @@ Visio VBComponent
 **Purpose:** Inject VBA modules from file system into Visio
 
 **Key Responsibilities:**
+- **Rubberduck Integration:** Recursively discover files and inject `@Folder` annotations based on path
 - Repair and normalize VBA file headers
 - Handle encoding conversions (UTF-8 → cp1252 → UTF-8 roundtrip)
 - Preserve comments and Option Explicit statements
@@ -179,6 +181,8 @@ Debounce timer (prevent rapid imports)
 Importer receives file path
        ↓
 Repair VBA headers
+       ↓
+(Rubberduck: Inject @Folder annotations)
        ↓
 Find target document (from folder structure)
        ↓

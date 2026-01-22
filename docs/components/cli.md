@@ -24,6 +24,7 @@ visiowings edit --file document.vsdm [options]
 - `--bidirectional`: Enable Visio → VS Code sync (polling)
 - `--debug`: Enable verbose logging
 - `--sync-delete-modules`: Auto-delete Visio modules when local files deleted
+- `--rubberduck`: Enable Rubberduck directory structure integration
 
 **Workflow:**
 1. Parse arguments
@@ -68,6 +69,7 @@ visiowings export --file document.vsdm --output ./vba_modules
 - `--file, -f` (required): Path to Visio file
 - `--output, -o`: Export directory
 - `--debug`: Enable verbose logging
+- `--rubberduck`: Enable Rubberduck directory structure integration
 
 **Workflow:**
 1. Connect to Visio
@@ -89,6 +91,7 @@ visiowings import --file document.vsdm --input ./vba_modules --force
 - `--input, -i`: Import directory
 - `--force`: Allow overwriting document modules
 - `--debug`: Enable verbose logging
+- `--rubberduck`: Enable Rubberduck directory structure integration
 
 **Workflow:**
 1. Connect to Visio
