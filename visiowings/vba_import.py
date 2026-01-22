@@ -11,7 +11,7 @@ from .encoding import DEFAULT_CODEPAGE, resolve_encoding
 
 
 class VisioVBAImporter:
-    def __init__(self, visio_file_path, force_document=False, debug=False, silent_reconnect=False, always_yes=False, user_codepage=None):
+    def __init__(self, visio_file_path, force_document=False, debug=False, silent_reconnect=False, always_yes=False, user_codepage=None, use_rubberduck=False):
         self.visio_file_path = visio_file_path
         self.visio_app = None
         self.doc = None
@@ -23,6 +23,7 @@ class VisioVBAImporter:
         self.always_yes = always_yes
         self.user_codepage = user_codepage
         self.codepage = DEFAULT_CODEPAGE
+        self.use_rubberduck = use_rubberduck
 
     def connect_to_visio(self):
         try:
@@ -65,29 +66,109 @@ class VisioVBAImporter:
 
     def _find_document_for_file(self, file_path):
         """
-        Returns the Visio document object associated with this file, based on parent folder.
-        If no matching document is open, returns None and warns the user.
+        Returns the Visio document object associated with this file, based on folder structure.
+        Searches upwards to find a directory matching a known document.
         """
-        parent_dir = file_path.parent.name
-        if parent_dir in self.document_map:
-            if self.debug:
-                print(f"[DEBUG] File {file_path.name} belongs to document: {parent_dir}")
-            return self.document_map[parent_dir]
-        else:
-            # Fallback for root files (legacy single-document support)
-            # If the file is in the root import dir (parent isn't in map), assign to main doc
-            # But only if we are in single-doc mode or explicit root import
-            if self.debug:
-                print(f"[DEBUG] No folder match for {file_path.name}, attempting main doc fallback")
-            return self.doc_manager.get_main_document()
+        current_path = file_path.parent
+        # Traverse up to find a matching document root folder
+        # Limit traversal to avoid going too far up (e.g. to root /)
+        # We assume the input_dir is the root of the operation.
+        # But we don't have input_dir easily here. We can assume we stop when we hit a known doc folder.
 
-    def _create_temp_codepage_file(self, file_path, codepage):
+        # Try direct parent first
+        if current_path.name in self.document_map:
+            if self.debug:
+                print(f"[DEBUG] File {file_path.name} belongs to document: {current_path.name}")
+            return self.document_map[current_path.name]
+
+        # In rubberduck mode, we might be deep in subfolders
+        if self.use_rubberduck:
+            # Try walking up
+            for _ in range(10): # Max depth safety
+                if current_path.name in self.document_map:
+                    if self.debug:
+                        print(f"[DEBUG] File {file_path.name} (nested) belongs to document: {current_path.name}")
+                    return self.document_map[current_path.name]
+                if current_path.parent == current_path: # Root
+                    break
+                current_path = current_path.parent
+
+        # Fallback for root files (legacy single-document support)
+        if self.debug:
+            print(f"[DEBUG] No folder match for {file_path.name}, attempting main doc fallback")
+        return self.doc_manager.get_main_document()
+
+    def _ensure_folder_annotation(self, content, file_path, doc_info):
+        """Inject or update Rubberduck @Folder annotation based on file path"""
+        if not self.use_rubberduck:
+            return content
+
+        # Calculate relative path from document root
+        try:
+            # We need to find the document root directory in the path
+            # This is tricky because file_path is absolute.
+            # We can use the doc_info.folder_name to find the split point.
+            parts = file_path.parts
+            if doc_info.folder_name in parts:
+                idx = parts.index(doc_info.folder_name)
+                # Subfolder parts come after the document folder
+                sub_parts = parts[idx+1:-1] # -1 to exclude filename
+                if not sub_parts:
+                     return content # Root of document, no folder annotation needed
+
+                # Inject as comment: '@Folder("Path")
+                folder_annotation = f"'@Folder(\"{ '.'.join(sub_parts) }\")"
+
+                # Check if annotation exists (any variant)
+                if "@Folder" in content:
+                    # Update existing (regex replace), handling optional comment prefix in existing file
+                    # We standardize it to have the comment prefix
+                    content = re.sub(r"(')?\s*@Folder\s*\(\s*\"[^\"]+\"\s*\)", folder_annotation, content, count=1)
+                else:
+                    # Inject
+                    # Preferred location: Top of file, but after VB_Name if present.
+                    # Or before Option Explicit.
+                    lines = content.splitlines()
+                    insert_idx = 0
+
+                    # Skip Attribute lines at top
+                    while insert_idx < len(lines) and lines[insert_idx].strip().startswith("Attribute "):
+                         insert_idx += 1
+
+                    # Check for Option Explicit
+                    option_explicit_idx = -1
+                    for i, line in enumerate(lines):
+                        if line.strip().lower() == "option explicit":
+                            option_explicit_idx = i
+                            break
+
+                    if option_explicit_idx != -1:
+                        # Insert before Option Explicit
+                        lines.insert(option_explicit_idx, folder_annotation)
+                    else:
+                        # Insert after attributes
+                        lines.insert(insert_idx, folder_annotation)
+
+                    content = "\n".join(lines)
+
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Error ensuring folder annotation: {e}")
+
+        return content
+
+    def _create_temp_codepage_file(self, file_path, codepage, doc_info=None):
         """Create a temporary file with configured encoding for VBA import."""
         import tempfile
         try:
             text = file_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             text = file_path.read_text(encoding=codepage)
+
+        # Handle Rubberduck annotations
+        if self.use_rubberduck and doc_info:
+            text = self._ensure_folder_annotation(text, file_path, doc_info)
+
         module_name = file_path.stem
         if "Attribute VB_Name" not in text:
             header = f'Attribute VB_Name = "{module_name}"\n'
@@ -158,7 +239,7 @@ class VisioVBAImporter:
                     return False
                 vb_project.VBComponents.Remove(component)
 
-            temp_file = self._create_temp_codepage_file(file_path, self.codepage)
+            temp_file = self._create_temp_codepage_file(file_path, self.codepage, doc_info=target_doc_info)
             vb_project.VBComponents.Import(str(temp_file))
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
@@ -400,10 +481,15 @@ class VisioVBAImporter:
         # 1. Discovery Phase
         # Find all candidate files
         candidate_files = []
-        for ext in ['*.bas', '*.cls', '*.frm']:
-            candidate_files.extend(input_dir.glob(ext)) # Root files
-            for doc_folder in self.get_document_folders():
-                 candidate_files.extend((input_dir / doc_folder).glob(ext)) # Subdir files
+        # In RD mode, we need recursive search
+        if self.use_rubberduck:
+            for ext in ['*.bas', '*.cls', '*.frm']:
+                candidate_files.extend(input_dir.rglob(ext))
+        else:
+            for ext in ['*.bas', '*.cls', '*.frm']:
+                candidate_files.extend(input_dir.glob(ext)) # Root files
+                for doc_folder in self.get_document_folders():
+                    candidate_files.extend((input_dir / doc_folder).glob(ext)) # Subdir files
 
         # Map files to documents
         for file_path in candidate_files:
@@ -521,7 +607,7 @@ class VisioVBAImporter:
                         if component:
                             vb_project.VBComponents.Remove(component)
 
-                        temp_file = self._create_temp_codepage_file(file_path, self.codepage)
+                        temp_file = self._create_temp_codepage_file(file_path, self.codepage, doc_info=doc_info)
                         vb_project.VBComponents.Import(str(temp_file))
 
                         # Clean up

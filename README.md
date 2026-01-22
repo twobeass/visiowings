@@ -98,16 +98,26 @@ visiowings edit --file yourdoc.vsdm --sync-delete-modules --debug
 
 # Custom output directory
 visiowings edit --file yourdoc.vsdm --output ./vba_modules
+
+# Enable Rubberduck folder structure integration
+visiowings edit --file yourdoc.vsdm --rubberduck
 ```
 
 ### Export & Import
 ```bash
 # Export VBA modules (one-time)
-visiowings export --file yourdoc.vsdm --output ./vba_modules
+visiowings export --file yourdoc.vsdm --output ./vba_modules --rd
 
 # Import VBA modules
-visiowings import --file yourdoc.vsdm --input ./vba_modules --force
+visiowings import --file yourdoc.vsdm --input ./vba_modules --force --rd
 ```
+
+### Rubberduck Integration (New!)
+Use Rubberduck-compatible folder annotations (`@Folder("Folder.Sub")`) to organize your VBA project structure automatically.
+
+- **Export:** Reads `@Folder` annotations from VBA modules and exports files into the corresponding directory structure.
+- **Import:** Detects file location in the directory structure and automatically injects or updates `@Folder` annotations in the imported code.
+- **Sync:** Works seamlessly with `edit` mode to maintain structure while you work.
 
 ### Safe Export & Import (NEW)
 - **Export:** Uses normalization and header-stripping to prevent accidental differences and overwriting. On conflict, user is prompted to overwrite, skip, or choose interactively.
@@ -122,12 +132,14 @@ visiowings import --file yourdoc.vsdm --input ./vba_modules --force
 | `--force`              | Overwrite Document modules (ThisDocument.cls)                            |
 | `--bidirectional`      | Enable bidirectional sync (Visio ↔ VS Code)                              |
 | `--sync-delete-modules`| Automatically delete Visio modules when matching files are deleted        |
+| `--rubberduck`, `--rd` | Enable Rubberduck @Folder annotation support for directory structure      |
 | `--debug`              | Verbose debug logging                                                    |
 
 ---
 
 ## Advanced Features
 - **Multi-document support:** Each Visio file with VBA is exported/imported to a dedicated folder
+- **Rubberduck Integration:** Map `@Folder("Parent.Child")` annotations to real directory structures automatically
 - **Module deletion sync:** When enabled, `.bas`, `.cls`, `.frm` deletes in VS Code remove corresponding modules in Visio
 - **Smart change detection:** Only syncs when content changes; polling interval is optimized
 - **Bidirectional sync:** Changes in VS Code or Visio keep both in sync with the selected polling interval (default: 4 seconds)

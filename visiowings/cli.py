@@ -17,6 +17,7 @@ def cmd_edit(args):
     debug = getattr(args, 'debug', False)
     sync_delete_modules = getattr(args, 'sync_delete_modules', False)
     codepage = getattr(args, 'codepage', None)
+    use_rubberduck = getattr(args, 'rubberduck', False)
 
     if not visio_file.exists():
         print(f"❌ File not found: {visio_file}")
@@ -28,9 +29,11 @@ def cmd_edit(args):
         print("[DEBUG] Debug mode enabled")
     if codepage:
         print(f"📝 Codepage: {codepage}")
+    if use_rubberduck:
+        print("🦆 Rubberduck integration enabled (folder annotations)")
 
     print("\n=== Exporting VBA Modules ===")
-    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage)
+    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage, use_rubberduck=use_rubberduck)
     if not exporter.connect_to_visio():
         return
 
@@ -55,7 +58,7 @@ def cmd_edit(args):
             print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
 
     print("\n=== Starting Live Synchronization ===")
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, silent_reconnect=True, user_codepage=codepage)
+    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, silent_reconnect=True, user_codepage=codepage, use_rubberduck=use_rubberduck)
     if not importer.connect_to_visio():
         return
 
@@ -76,8 +79,12 @@ def cmd_export(args):
     output_dir = Path(args.output or '.').resolve()
     debug = getattr(args, 'debug', False)
     codepage = getattr(args, 'codepage', None)
+    use_rubberduck = getattr(args, 'rubberduck', False)
 
-    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage)
+    if use_rubberduck:
+        print("🦆 Rubberduck integration enabled (folder annotations)")
+
+    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage, use_rubberduck=use_rubberduck)
     if exporter.connect_to_visio():
         all_exported, all_hashes = exporter.export_modules(output_dir)
 
@@ -100,8 +107,12 @@ def cmd_import(args):
     input_dir = Path(args.input or '.').resolve()
     debug = getattr(args, 'debug', False)
     codepage = getattr(args, 'codepage', None)
+    use_rubberduck = getattr(args, 'rubberduck', False)
 
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, user_codepage=codepage)
+    if use_rubberduck:
+        print("🦆 Rubberduck integration enabled (folder annotations)")
+
+    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, user_codepage=codepage, use_rubberduck=use_rubberduck)
 
     # Use new batch import method
     imported_count = importer.import_modules_from_dir(input_dir)
@@ -150,6 +161,11 @@ def main():
         '--codepage', '--cp',
         help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
     )
+    edit_parser.add_argument(
+        '--rubberduck', '--rd',
+        action='store_true',
+        help='Use Rubberduck @Folder annotations for directory structure'
+    )
 
     # Export command
     export_parser = subparsers.add_parser('export', help='Export VBA modules (one-time)')
@@ -163,6 +179,11 @@ def main():
     export_parser.add_argument(
         '--codepage', '--cp',
         help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
+    )
+    export_parser.add_argument(
+        '--rubberduck', '--rd',
+        action='store_true',
+        help='Use Rubberduck @Folder annotations for directory structure'
     )
 
     # Import command
@@ -182,6 +203,11 @@ def main():
     import_parser.add_argument(
         '--codepage', '--cp',
         help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
+    )
+    import_parser.add_argument(
+        '--rubberduck', '--rd',
+        action='store_true',
+        help='Use Rubberduck @Folder annotations for directory structure'
     )
 
     # If no arguments are passed, start interactive menu
