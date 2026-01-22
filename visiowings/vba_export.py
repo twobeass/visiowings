@@ -15,7 +15,7 @@ from .encoding import DEFAULT_CODEPAGE, resolve_encoding
 
 
 class VisioVBAExporter:
-    def __init__(self, visio_file_path, debug=False, user_codepage=None, use_rubberduck=False):
+    def __init__(self, visio_file_path, debug=False, user_codepage=None, use_rubberduck=False, force_export_frx=False):
         self.visio_file_path = visio_file_path
         self.visio_app = None
         self.doc = None
@@ -24,6 +24,7 @@ class VisioVBAExporter:
         self.user_codepage = user_codepage
         self.codepage = DEFAULT_CODEPAGE
         self.use_rubberduck = use_rubberduck
+        self.force_export_frx = force_export_frx
 
     def connect_to_visio(self, silent=False):
         try:
@@ -289,8 +290,8 @@ class VisioVBAExporter:
             for component in vb_project.VBComponents:
                 file_path = component_targets[component.Name]
 
-                # If file exists locally and is a code module, check for changes
-                if file_path.exists() and component.Type in [1, 2, 100]:
+                # If file exists locally and is a code module (including Forms), check for changes
+                if file_path.exists() and component.Type in [1, 2, 3, 100]:
                     are_different, local_hash, visio_hash = self._compare_module_content(
                         file_path, component
                     )
@@ -384,6 +385,14 @@ class VisioVBAExporter:
                     if self.debug:
                         print(f"⊘ Skipped: {doc_info.folder_name}/{file_path.relative_to(doc_root_path)} (local changes preserved)")
                     skipped_count += 1
+                    visio_module_names.add(component.Name.lower())
+                    exported_paths_set.add(file_path.resolve())
+                    continue
+
+                # Skip Forms if code is identical and export not forced (preserves .frx)
+                if component.Type == 3 and file_path.exists() and file_path.name not in files_with_changes and not self.force_export_frx:
+                    if self.debug:
+                        print(f"[DEBUG] Skipped export: {doc_info.folder_name}/{file_path.relative_to(doc_root_path)} (code identical, preserving .frx)")
                     visio_module_names.add(component.Name.lower())
                     exported_paths_set.add(file_path.resolve())
                     continue

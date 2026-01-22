@@ -33,7 +33,13 @@ def cmd_edit(args):
         print("🦆 Rubberduck integration enabled (folder annotations)")
 
     print("\n=== Exporting VBA Modules ===")
-    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage, use_rubberduck=use_rubberduck)
+    exporter = VisioVBAExporter(
+        str(visio_file),
+        debug=debug,
+        user_codepage=codepage,
+        use_rubberduck=use_rubberduck,
+        force_export_frx=getattr(args, 'export_frx', False)
+    )
     if not exporter.connect_to_visio():
         return
 
@@ -84,7 +90,13 @@ def cmd_export(args):
     if use_rubberduck:
         print("🦆 Rubberduck integration enabled (folder annotations)")
 
-    exporter = VisioVBAExporter(str(visio_file), debug=debug, user_codepage=codepage, use_rubberduck=use_rubberduck)
+    exporter = VisioVBAExporter(
+        str(visio_file),
+        debug=debug,
+        user_codepage=codepage,
+        use_rubberduck=use_rubberduck,
+        force_export_frx=getattr(args, 'export_frx', False)
+    )
     if exporter.connect_to_visio():
         all_exported, all_hashes = exporter.export_modules(output_dir)
 
@@ -166,6 +178,11 @@ def main():
         action='store_true',
         help='Use Rubberduck @Folder annotations for directory structure'
     )
+    edit_parser.add_argument(
+        '--export-frx',
+        action='store_true',
+        help='Force export of .frx files even if .frm code has not changed'
+    )
 
     # Export command
     export_parser = subparsers.add_parser('export', help='Export VBA modules (one-time)')
@@ -184,6 +201,11 @@ def main():
         '--rubberduck', '--rd',
         action='store_true',
         help='Use Rubberduck @Folder annotations for directory structure'
+    )
+    export_parser.add_argument(
+        '--export-frx',
+        action='store_true',
+        help='Force export of .frx files even if .frm code has not changed'
     )
 
     # Import command

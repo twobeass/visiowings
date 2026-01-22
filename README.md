@@ -108,6 +108,9 @@ visiowings edit --file yourdoc.vsdm --rubberduck
 # Export VBA modules (one-time)
 visiowings export --file yourdoc.vsdm --output ./vba_modules --rd
 
+# Force export of .frx files
+visiowings export --file yourdoc.vsdm --export-frx
+
 # Import VBA modules
 visiowings import --file yourdoc.vsdm --input ./vba_modules --force --rd
 ```
@@ -133,6 +136,7 @@ Use Rubberduck-compatible folder annotations (`@Folder("Folder.Sub")`) to organi
 | `--bidirectional`      | Enable bidirectional sync (Visio ↔ VS Code)                              |
 | `--sync-delete-modules`| Automatically delete Visio modules when matching files are deleted        |
 | `--rubberduck`, `--rd` | Enable Rubberduck @Folder annotation support for directory structure      |
+| `--export-frx`         | Force export of .frx files even if .frm code has not changed              |
 | `--debug`              | Verbose debug logging                                                    |
 
 ---
@@ -142,6 +146,7 @@ Use Rubberduck-compatible folder annotations (`@Folder("Folder.Sub")`) to organi
 - **Rubberduck Integration:** Map `@Folder("Parent.Child")` annotations to real directory structures automatically
 - **Module deletion sync:** When enabled, `.bas`, `.cls`, `.frm` deletes in VS Code remove corresponding modules in Visio
 - **Smart change detection:** Only syncs when content changes; polling interval is optimized
+- **Intelligent Form Export:** .frx files are now only exported if the corresponding .frm code changes to prevent Git churn. Use `--export-frx` to force export.
 - **Bidirectional sync:** Changes in VS Code or Visio keep both in sync with the selected polling interval (default: 4 seconds)
 - **NEW: Safe Import/Export:** Content checks, normalization, encoding handling, and interactive user options ensure maximum safety
 

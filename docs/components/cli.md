@@ -25,6 +25,7 @@ visiowings edit --file document.vsdm [options]
 - `--debug`: Enable verbose logging
 - `--sync-delete-modules`: Auto-delete Visio modules when local files deleted
 - `--rubberduck`: Enable Rubberduck directory structure integration
+- `--export-frx`: Force export of .frx files even if .frm code has not changed
 
 **Workflow:**
 1. Parse arguments
@@ -70,6 +71,7 @@ visiowings export --file document.vsdm --output ./vba_modules
 - `--output, -o`: Export directory
 - `--debug`: Enable verbose logging
 - `--rubberduck`: Enable Rubberduck directory structure integration
+- `--export-frx`: Force export of .frx files even if .frm code has not changed
 
 **Workflow:**
 1. Connect to Visio
