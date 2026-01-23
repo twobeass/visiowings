@@ -19,6 +19,31 @@ class VisioDocumentType:
     DRAWING = 1    # visTypeDrawing
     STENCIL = 2    # visTypeStencil
     TEMPLATE = 3   # visTypeTemplate
+    
+def sanitize_document_name(name):
+    """Sanitize document name for use as folder name"""
+    # Use full name first to avoid path splitting issues on special chars
+    # Remove extension manually or use Path if safe
+    # On Windows paths, special chars like | or ? are invalid in filenames anyway,
+    # but if we get a raw string, we should handle it robustly.
+
+    # Just strip extension first
+    if '.' in name:
+        name = name.rsplit('.', 1)[0]
+
+    # Replace invalid characters with underscore
+    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+
+    # Remove spaces
+    name = name.replace(' ', '_').lower()
+
+    # Remove consecutive underscores
+    name = re.sub(r'_+', '_', name)
+
+    # Remove leading/trailing underscores
+    name = name.strip('_')
+
+    return name or 'document'
 
 class VisioDocumentInfo:
     """Information about a Visio document"""
@@ -30,7 +55,7 @@ class VisioDocumentInfo:
         self.full_name = doc.FullName
         self.type = doc.Type
         self.has_vba = self._check_has_vba()
-        self.folder_name = self._sanitize_name(self.name)
+        self.folder_name = sanitize_document_name(self.name)
 
     def _check_has_vba(self):
         """Check if document has VBA code"""
@@ -41,31 +66,6 @@ class VisioDocumentInfo:
         except:
             pass
         return False
-
-    def _sanitize_name(self, name):
-        """Sanitize document name for use as folder name"""
-        # Use full name first to avoid path splitting issues on special chars
-        # Remove extension manually or use Path if safe
-        # On Windows paths, special chars like | or ? are invalid in filenames anyway,
-        # but if we get a raw string, we should handle it robustly.
-
-        # Just strip extension first
-        if '.' in name:
-            name = name.rsplit('.', 1)[0]
-
-        # Replace invalid characters with underscore
-        name = re.sub(r'[<>:"/\\|?*]', '_', name)
-
-        # Remove spaces
-        name = name.replace(' ', '_').lower()
-
-        # Remove consecutive underscores
-        name = re.sub(r'_+', '_', name)
-
-        # Remove leading/trailing underscores
-        name = name.strip('_')
-
-        return name or 'document'
 
     def get_type_name(self):
         """Get human-readable document type name"""

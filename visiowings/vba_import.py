@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pythoncom
 
-from .document_manager import VisioDocumentManager
+from .document_manager import VisioDocumentManager, sanitize_document_name
 from .encoding import DEFAULT_CODEPAGE, resolve_encoding
 
 
@@ -76,22 +76,31 @@ class VisioVBAImporter:
         # But we don't have input_dir easily here. We can assume we stop when we hit a known doc folder.
 
         # Try direct parent first
-        if current_path.name in self.document_map:
+        # Try direct parent first
+        sanitized_parent = sanitize_document_name(current_path.name)
+        if sanitized_parent in self.document_map:
             if self.debug:
-                print(f"[DEBUG] File {file_path.name} belongs to document: {current_path.name}")
-            return self.document_map[current_path.name]
+                print(f"[DEBUG] File {file_path.name} belongs to document: {sanitized_parent}")
+            return self.document_map[sanitized_parent]
 
         # In rubberduck mode, we might be deep in subfolders
         if self.use_rubberduck:
             # Try walking up
             for _ in range(10): # Max depth safety
-                if current_path.name in self.document_map:
+                sanitized_current = sanitize_document_name(current_path.name)
+                if sanitized_current in self.document_map:
                     if self.debug:
-                        print(f"[DEBUG] File {file_path.name} (nested) belongs to document: {current_path.name}")
-                    return self.document_map[current_path.name]
+                        print(f"[DEBUG] File {file_path.name} (nested) belongs to document: {sanitized_current}")
+                    return self.document_map[sanitized_current]
                 if current_path.parent == current_path: # Root
                     break
                 current_path = current_path.parent
+            
+            # If we are here in RD mode, we found NO match.
+            # Fallback to main document is DANGEROUS in multi-file projects.
+            if self.debug:
+                print(f"[DEBUG] No document match found for {file_path} in RD mode. Skipping main doc fallback.")
+            return None
 
         # Fallback for root files (legacy single-document support)
         if self.debug:
@@ -512,6 +521,7 @@ class VisioVBAImporter:
 
             files_with_changes = {}
             files_to_import = []
+            files_identical_count = 0
 
             # Check for conflicts
             for file_path in files:
@@ -540,7 +550,7 @@ class VisioVBAImporter:
                              # Usually if identical, we skip to save time/risk, unless specifically requested?
                              # Export skips identical. Import should likely skip identical too unless we are strictly overwriting.
                              # But let's assume if it's identical we skip it for safety/speed.
-                             pass
+                             files_identical_count += 1
                 else:
                     # New module
                     files_to_import.append((file_path, None, False))
@@ -621,5 +631,8 @@ class VisioVBAImporter:
                     total_imported += 1
                 except Exception as e:
                     print(f"✗ Error importing {file_path.name}: {type(e).__name__}: {e}")
+            
+            if files_identical_count > 0:
+                print(f"✓ {files_identical_count} modules up-to-date (skipped)")
 
         return total_imported
