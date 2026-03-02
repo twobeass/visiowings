@@ -250,6 +250,39 @@ class VisioVBAImporter:
 
             temp_file = self._create_temp_codepage_file(file_path, self.codepage, doc_info=target_doc_info)
             vb_project.VBComponents.Import(str(temp_file))
+            
+            # Verify the imported component name matches the intended name
+            # If Visio is still processing a removal, it might append '1' (e.g., ModuleName1)
+            imported_comp = None
+            for comp in vb_project.VBComponents:
+                # We can't rely just on the last added. A safe way is to check if our target name exists.
+                # If not, the import created something else. We can also try mapping by name we expect.
+                # Since we just imported it, we can check if `module_name` exists. If not, it failed or renamed.
+                if comp.Name == module_name:
+                    imported_comp = comp
+                    break
+                    
+            if not imported_comp:
+                # Target name not found. Visio renamed it during import (e.g., to Module11)
+                # Find the newly imported component to clean it up (often the last one, or by temporary name)
+                # This could be tricky to find definitively if we don't know the exact new name.
+                # However, any imported name != module_name that we just added should be removed if we can find it.
+                # A common pattern is target_name + "1". Let's check for that.
+                possible_renamed_comp = None
+                for comp in vb_project.VBComponents:
+                    if comp.Name.startswith(module_name) and comp.Name != module_name:
+                         possible_renamed_comp = comp
+                         break
+                
+                if possible_renamed_comp:
+                     try:
+                         vb_project.VBComponents.Remove(possible_renamed_comp)
+                     except Exception:
+                         pass
+                         
+                print(f"✗ Error: Visio is still processing the previous module removal. Import aborted for {file_path.name} to avoid 'ModuleName1' bug.")
+                return False
+                
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
         except Exception as e:
@@ -600,7 +633,7 @@ class VisioVBAImporter:
                         ):
                             print(line)
 
-                        choice = input("  Overwrite Visio module? (y/N): ").strip().lower()
+                        choice = input(f"  Overwrite Visio module '{fname}'? (y/N): ").strip().lower()
                         if choice in ('y', 'yes'):
                              files_to_import.append((info['path'], info['component'], False))
                 else:
@@ -619,6 +652,30 @@ class VisioVBAImporter:
 
                         temp_file = self._create_temp_codepage_file(file_path, self.codepage, doc_info=doc_info)
                         vb_project.VBComponents.Import(str(temp_file))
+                        
+                        # Verify the imported component name matches the intended name to prevent "ModuleName1" bug
+                        module_name = file_path.stem
+                        imported_comp = None
+                        for comp in vb_project.VBComponents:
+                            if comp.Name == module_name:
+                                imported_comp = comp
+                                break
+                                
+                        if not imported_comp:
+                            possible_renamed_comp = None
+                            for comp in vb_project.VBComponents:
+                                if comp.Name.startswith(module_name) and comp.Name != module_name:
+                                     possible_renamed_comp = comp
+                                     break
+                            
+                            if possible_renamed_comp:
+                                 try:
+                                     vb_project.VBComponents.Remove(possible_renamed_comp)
+                                 except Exception:
+                                     pass
+                            
+                            print(f"✗ Error: Visio is still processing. Import aborted for {doc_info.folder_name}/{file_path.name}")
+                            continue
 
                         # Clean up
                         if temp_file and temp_file != str(file_path):

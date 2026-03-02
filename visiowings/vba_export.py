@@ -359,7 +359,7 @@ class VisioVBAExporter:
                             if diff_lines:
                                 print('\n'.join(diff_lines))
 
-                        choice = input("  Overwrite? (y/N): ").strip().lower()
+                        choice = input(f"  Overwrite local file '{fname}'? (y/N): ").strip().lower()
                         if choice not in ('y', 'yes'):
                             files_to_skip.add(fname)
 
