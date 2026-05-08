@@ -197,9 +197,9 @@ omit = [
 [tool.coverage.report]
 # Coverage ratchet: this floor is raised every time a new test layer lands.
 # Phase C floor: 15% (encoding + import-internals + export-internals).
-# Phase D will raise it as _retry, exceptions and _logging arrive.
+# Phase D floor: 20% (+ _retry, exceptions, _logging at 100% each).
 # Long-term target after the COM modules are properly mockable: 80%.
-fail_under = 15
+fail_under = 20
 show_missing = true
 skip_covered = false
 precision = 2
