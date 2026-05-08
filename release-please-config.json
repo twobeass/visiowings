@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "python",
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "draft": false,
+  "prerelease": false,
+  "packages": {
+    ".": {
+      "package-name": "visiowings",
+      "release-type": "python",
+      "extra-files": [
+        "visiowings/__init__.py",
+        "setup.py"
+      ]
+    }
+  },
+  "changelog-sections": [
+    {"type": "feat",     "section": "Features"},
+    {"type": "fix",      "section": "Bug Fixes"},
+    {"type": "perf",     "section": "Performance"},
+    {"type": "revert",   "section": "Reverts"},
+    {"type": "docs",     "section": "Documentation", "hidden": false},
+    {"type": "style",    "section": "Styles", "hidden": true},
+    {"type": "refactor", "section": "Refactoring", "hidden": false},
+    {"type": "test",     "section": "Tests", "hidden": true},
+    {"type": "build",    "section": "Build System", "hidden": false},
+    {"type": "ci",       "section": "Continuous Integration", "hidden": false},
+    {"type": "chore",    "section": "Chores", "hidden": true}
+  ]
+}

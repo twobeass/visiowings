@@ -43,19 +43,35 @@ Visio VBA Editor lacks modern tooling. visiowings brings:
 ## Installation
 ### Prerequisites
 - Windows (required for COM automation)
-- Python 3.8+
+- Python 3.10+
 - Microsoft Visio (with VBA support)
 
-### Install from GitHub (recommended)
+### Install with pipx (recommended)
+[`pipx`](https://pipx.pypa.io/) installs visiowings into an isolated
+environment and puts the `visiowings` command on your PATH:
+
 ```bash
-pip install git+https://github.com/twobeass/visiowings.git
+pipx install visiowings
 ```
+
+To upgrade later: `pipx upgrade visiowings`.
+
+### Install with pip
+```bash
+pip install visiowings
+```
+
+### Standalone Windows EXE (no Python required)
+Download `visiowings.exe` from the
+[latest GitHub Release](https://github.com/twobeass/visiowings/releases/latest)
+and place it somewhere on your PATH.
 
 ### Install from source
 ```bash
 git clone https://github.com/twobeass/visiowings.git
 cd visiowings
-pip install -e .
+pip install -e ".[dev]"
+pre-commit install
 ```
 
 ---
