@@ -13,6 +13,13 @@ from pathlib import Path
 
 from . import __version__
 from ._logging import setup_logging
+from ._update_check import schedule_async as schedule_update_check
+from .config import (
+    CONFIG_FILENAME,
+    VisiowingsConfig,
+    load_config,
+    write_config,
+)
 from .exceptions import (
     InvalidVisioFileError,
     UnsupportedEncodingError,
@@ -23,6 +30,20 @@ from .vba_export import VisioVBAExporter
 from .vba_import import VisioVBAImporter
 
 logger = logging.getLogger("visiowings.cli")
+
+
+def _apply_config_defaults(args: argparse.Namespace, cfg: VisiowingsConfig) -> None:
+    """Fill in missing args from a loaded ``.visiowings.toml`` config."""
+
+    for field_name in ("file", "output", "input", "codepage"):
+        if getattr(args, field_name, None) is None:
+            value = getattr(cfg, field_name, None)
+            if value is not None:
+                setattr(args, field_name, value)
+    for field_name in ("bidirectional", "rubberduck", "sync_delete_modules", "force"):
+        # Argparse store_true defaults to False, so we only upgrade False -> True.
+        if not getattr(args, field_name, False) and getattr(cfg, field_name, False):
+            setattr(args, field_name, True)
 
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +199,86 @@ def cmd_export(args):
                     print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
 
 
+def cmd_init(args):
+    """Generate a ``.visiowings.toml`` config in the current directory.
+
+    Walks the user through a small wizard:
+
+    1. List currently open Visio documents (or accept manual path entry).
+    2. Pick the main document.
+    3. Pick output directory + sync flags.
+    4. Write the config.
+    """
+
+    config_path = Path.cwd() / CONFIG_FILENAME
+    if config_path.exists() and not getattr(args, "force", False):
+        raise VisiowingsError(
+            f"{config_path} already exists. Use `visiowings init --force` to overwrite."
+        )
+
+    print(f"\n🦉 visiowings init — writing {config_path.name}\n")
+
+    docs = _discover_open_documents()
+
+    if docs:
+        print("Open Visio documents:")
+        for i, full_path in enumerate(docs, start=1):
+            print(f"  {i}. {full_path}")
+        print(f"  {len(docs) + 1}. Enter a path manually")
+        while True:
+            choice = input(f"\nSelect document [1-{len(docs) + 1}]: ").strip()
+            if choice.isdigit():
+                idx = int(choice)
+                if 1 <= idx <= len(docs):
+                    main_file = docs[idx - 1]
+                    break
+                if idx == len(docs) + 1:
+                    main_file = input("Path to Visio file: ").strip()
+                    break
+            print("⚠️  Invalid selection, try again.")
+    else:
+        print("(No documents detected via COM. You can still enter a path manually.)\n")
+        main_file = input("Path to Visio file: ").strip()
+
+    output_dir = (input("Output directory for VBA files [vba]: ").strip() or "vba")
+    bidir = (input("Enable bidirectional sync (y/N)? ").strip().lower() == "y")
+    rubberduck = (input("Use Rubberduck @Folder annotations (y/N)? ").strip().lower() == "y")
+    codepage = input("Codepage (blank = auto-detect): ").strip() or None
+
+    cfg = VisiowingsConfig(
+        file=main_file,
+        output=output_dir,
+        codepage=codepage,
+        bidirectional=bidir,
+        rubberduck=rubberduck,
+    )
+    target = write_config(cfg)
+    print(f"\n✓ Wrote {target}")
+    print("  Run `visiowings edit` (no arguments) to start syncing with these defaults.")
+
+
+def _discover_open_documents() -> list[str]:
+    """Best-effort listing of open Visio documents — empty list on non-Windows."""
+
+    try:
+        import pythoncom  # type: ignore[import-not-found]
+        import win32com.client  # type: ignore[import-not-found]
+
+        try:
+            pythoncom.CoInitialize()
+        except pythoncom.com_error:
+            pass
+
+        try:
+            visio = win32com.client.GetActiveObject("Visio.Application")
+        except Exception:
+            return []
+        return [doc.FullName for doc in visio.Documents]
+    except Exception as e:  # noqa: BLE001 - best-effort discovery
+        logger.debug("Could not enumerate Visio documents: %s", e)
+        return []
+
+
 def cmd_import(args):
     """Import command: Import VBA modules only"""
     visio_file = _validate_visio_file(Path(args.file))
@@ -214,15 +315,31 @@ def _build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {__version__}",
     )
+    parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        help="Skip the daily PyPI update check (also disabled by VISIOWINGS_NO_UPDATE_CHECK=1)",
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # init command
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Create a .visiowings.toml config in the current directory",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing .visiowings.toml",
+    )
 
     # Edit command
     edit_parser = subparsers.add_parser(
         'edit',
         help='Edit VBA modules with live sync (VS Code <-> Visio)'
     )
-    edit_parser.add_argument('--file', '-f', required=True, help='Visio file (.vsdm, .vsdx, .vstm, .vstx)')
+    edit_parser.add_argument('--file', '-f', help='Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml')
     edit_parser.add_argument('--output', '-o', help='Export directory (default: current directory)')
     edit_parser.add_argument(
         '--force',
@@ -261,7 +378,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Export command
     export_parser = subparsers.add_parser('export', help='Export VBA modules (one-time)')
-    export_parser.add_argument('--file', '-f', required=True, help='Visio file (.vsdm, .vsdx, .vstm, .vstx)')
+    export_parser.add_argument('--file', '-f', help='Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml')
     export_parser.add_argument('--output', '-o', help='Export directory (default: current directory)')
     export_parser.add_argument(
         '--debug',
@@ -285,7 +402,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Import command
     import_parser = subparsers.add_parser('import', help='Import VBA modules (one-time)')
-    import_parser.add_argument('--file', '-f', required=True, help='Visio file (.vsdm, .vsdx, .vstm, .vstx)')
+    import_parser.add_argument('--file', '-f', help='Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml')
     import_parser.add_argument('--input', '-i', help='Import directory (default: current directory)')
     import_parser.add_argument(
         '--force',
@@ -327,8 +444,27 @@ def main(argv: list[str] | None = None) -> int:
 
     setup_logging(debug=getattr(args, "debug", False))
 
+    if not getattr(args, "no_update_check", False):
+        schedule_update_check()
+
+    # init does not consume the project config (it creates one), so we skip
+    # auto-loading there.
+    if args.command not in (None, "init"):
+        try:
+            cfg = load_config()
+        except Exception as e:  # noqa: BLE001 - bad config should not crash
+            logger.warning("Could not read .visiowings.toml: %s", e)
+            cfg = VisiowingsConfig()
+        _apply_config_defaults(args, cfg)
+
+        # File is mandatory after merge with config
+        if getattr(args, "file", None) is None and args.command in ("edit", "export", "import"):
+            parser.error("--file is required (or set `file = ...` in .visiowings.toml)")
+
     try:
-        if args.command == 'edit':
+        if args.command == 'init':
+            cmd_init(args)
+        elif args.command == 'edit':
             cmd_edit(args)
         elif args.command == 'export':
             cmd_export(args)

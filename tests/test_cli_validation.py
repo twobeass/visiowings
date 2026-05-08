@@ -120,10 +120,13 @@ class TestParser:
             parser.parse_args(["--help"])
         assert info.value.code == 0
 
-    def test_edit_requires_file(self):
+    def test_edit_does_not_require_file_on_parser_level(self):
+        # --file moved out of `required=True` so a `.visiowings.toml` config
+        # can supply the value. The CLI's main() raises later when neither
+        # flag nor config provides it (covered separately).
         parser = _build_parser()
-        with pytest.raises(SystemExit):
-            parser.parse_args(["edit"])  # missing --file
+        ns = parser.parse_args(["edit"])
+        assert ns.file is None
 
 
 def test_main_returns_nonzero_on_validation_error(capsys, tmp_path, monkeypatch):

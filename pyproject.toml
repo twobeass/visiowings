@@ -199,8 +199,9 @@ omit = [
 # Phase C floor: 15% (encoding + import-internals + export-internals).
 # Phase D floor: 25% (+ _retry, exceptions, _logging at 100% each,
 #                       file-watcher debounce, BOM detection, CLI validators).
+# Phase F floor: 30% (+ config, update-check).
 # Long-term target after the COM modules are properly mockable: 80%.
-fail_under = 25
+fail_under = 30
 show_missing = true
 skip_covered = false
 precision = 2
