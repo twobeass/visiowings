@@ -1,0 +1,112 @@
+# See https://pre-commit.com for more information.
+# Run `pre-commit install` once to enable, then hooks fire on `git commit`.
+
+default_language_version:
+  python: python3.12
+
+default_stages: [pre-commit]
+
+ci:
+  # When a future tool (e.g. pre-commit.ci) is enabled, batch auto-fix PRs.
+  autofix_commit_msg: "style: pre-commit auto-fixes"
+  autoupdate_commit_msg: "chore(deps): pre-commit autoupdate"
+  autoupdate_schedule: weekly
+
+repos:
+  # ------------------------------------------------------------------
+  # Generic hygiene
+  # ------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: \.(bas|cls|frm)$
+      - id: end-of-file-fixer
+        exclude: \.(bas|cls|frm|frx)$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: debug-statements
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        # VBA files must keep CRLF for re-import into Visio
+        exclude: \.(bas|cls|frm|bat|cmd|ps1)$
+
+  # ------------------------------------------------------------------
+  # Ruff: lint + format + import-sort
+  # ------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # ------------------------------------------------------------------
+  # Mypy
+  # ------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
+        additional_dependencies:
+          - types-pywin32>=306.0
+          - watchdog>=3.0.0
+        files: ^visiowings/
+        exclude: ^tests/
+
+  # ------------------------------------------------------------------
+  # Spell-checking
+  # ------------------------------------------------------------------
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args:
+          - --skip=*.bas,*.cls,*.frm,*.lock,*.json,*.svg,.git
+          - --ignore-words-list=nd,ist,crate,iam
+        exclude: \.(bas|cls|frm|frx)$
+
+  # ------------------------------------------------------------------
+  # Secret scanning
+  # ------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ------------------------------------------------------------------
+  # PEP 621 / pyproject.toml schema validation
+  # ------------------------------------------------------------------
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.22
+    hooks:
+      - id: validate-pyproject
+
+  # ------------------------------------------------------------------
+  # Conventional commits
+  # ------------------------------------------------------------------
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []
+
+  # ------------------------------------------------------------------
+  # YAML / Actions
+  # ------------------------------------------------------------------
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
