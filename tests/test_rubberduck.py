@@ -80,25 +80,29 @@ Option Explicit"""
     def test_find_document_for_file_recursive(self):
         importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=True)
 
-        # Setup mock document map
+        # Setup mock document map. Keys must match sanitize_document_name's
+        # output, which lowercases the folder name.
         mock_doc = MagicMock()
-        importer.document_map = {"Drawing1_vsdx": mock_doc}
+        importer.document_map = {"drawing1_vsdx": mock_doc}
 
-        # Test deep path
+        # Deep path: walk up to find drawing1_vsdx
         deep_path = Path("/workspace/Drawing1_vsdx/Folder/Sub/Module.bas")
-        found_doc = importer._find_document_for_file(deep_path)
-        assert found_doc == mock_doc
+        assert importer._find_document_for_file(deep_path) == mock_doc
 
-        # Test root path
+        # Root path: direct parent match
         root_path = Path("/workspace/Drawing1_vsdx/Module.bas")
-        found_doc = importer._find_document_for_file(root_path)
-        assert found_doc == mock_doc
+        assert importer._find_document_for_file(root_path) == mock_doc
 
-        # Test unrelated path (should fall back to main doc mock)
+        # Unrelated path in rubberduck mode: returns None (no main-doc fallback,
+        # see vba_import._find_document_for_file:103). Use_rubberduck=False
+        # would fall back to doc_manager.get_main_document().
         importer.doc_manager = MagicMock()
         main_doc_mock = MagicMock()
         importer.doc_manager.get_main_document.return_value = main_doc_mock
 
         other_path = Path("/workspace/Other/Module.bas")
-        found_doc = importer._find_document_for_file(other_path)
-        assert found_doc == main_doc_mock
+        assert importer._find_document_for_file(other_path) is None
+
+        # Same call without rubberduck mode -> falls back to main doc.
+        importer.use_rubberduck = False
+        assert importer._find_document_for_file(other_path) == main_doc_mock
