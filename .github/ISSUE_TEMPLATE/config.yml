@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/twobeass/visiowings/discussions
+    about: Use GitHub Discussions for questions, ideas, and general feedback.
+  - name: Security vulnerability
+    url: https://github.com/twobeass/visiowings/security/advisories/new
+    about: Privately report security issues via GitHub Security Advisories.

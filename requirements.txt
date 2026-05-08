@@ -1,2 +1,5 @@
-pywin32>=305
+# Runtime dependencies are declared in pyproject.toml ([project.dependencies]).
+# This file is kept for compatibility with tools that still expect it.
+# For development use: pip install -e ".[dev]"
+pywin32>=305; sys_platform == "win32"
 watchdog>=3.0.0

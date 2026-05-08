@@ -1,0 +1,57 @@
+# Auto-detect text files and normalize line endings to LF in the repo.
+* text=auto eol=lf
+
+# Python sources
+*.py text eol=lf diff=python
+
+# VBA sources require CRLF on disk for re-import into Visio
+*.bas text eol=crlf working-tree-encoding=UTF-8
+*.cls text eol=crlf working-tree-encoding=UTF-8
+*.frm text eol=crlf working-tree-encoding=UTF-8
+
+# VBA binary resource files
+*.frx -text -diff binary
+
+# Visio binary documents
+*.vsd  binary
+*.vsdx binary
+*.vsdm binary
+*.vss  binary
+*.vssx binary
+*.vssm binary
+*.vst  binary
+*.vstx binary
+*.vstm binary
+
+# Other binaries
+*.exe binary
+*.dll binary
+*.pyc binary
+
+# Tests fixtures may store raw bytes (encoding round-trip fixtures, BOM samples)
+tests/fixtures/**/*.bas -text
+tests/fixtures/**/*.cls -text
+tests/fixtures/**/*.frm -text
+
+# Lock files
+*.lock text eol=lf
+
+# Documentation
+*.md   text eol=lf
+*.rst  text eol=lf
+
+# Configuration
+*.toml text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.cfg  text eol=lf
+*.ini  text eol=lf
+
+# Windows-specific helpers
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Linguist overrides for accurate language stats on GitHub
+docs/* linguist-documentation

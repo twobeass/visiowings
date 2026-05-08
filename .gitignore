@@ -30,6 +30,8 @@ PIPFILE.lock
 # PyInstaller
 *.manifest
 *.spec
+# But keep our committed PyInstaller spec
+!visiowings.spec
 
 # Installer logs
 pip-log.txt
@@ -133,6 +135,9 @@ dmypy.json
 *.bas
 *.cls
 *.frm
+*.frx
+# But keep test fixtures
+!tests/fixtures/**
 
 # Visio files (for testing)
 *.vsd
@@ -140,3 +145,25 @@ dmypy.json
 *.vsdm
 *.vstx
 *.vstm
+*.vss
+*.vssx
+*.vssm
+
+# Local user config (created by `visiowings init`)
+.visiowings.toml
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Build / release artifacts
+*.cdx.json
+sbom.json
+licenses.json
+
+# uv lockfile is OK to commit but local caches aren't
+.uv/
+
+# Site (mkdocs build output)
+site/
+public/
