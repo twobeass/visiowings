@@ -28,9 +28,11 @@ class VisioVBAImporter:
     def connect_to_visio(self):
         try:
             pythoncom.CoInitialize()
-        except Exception as e:
+        except pythoncom.com_error as e:
+            # CoInitialize raises if the apartment was already initialised in
+            # an incompatible threading mode; non-fatal.
             if self.debug:
-                print(f"[DEBUG] COM already initialized: {type(e).__name__}: {e}")
+                print(f"[DEBUG] COM already initialized: {e}")
         self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
         if not self.doc_manager.connect_to_visio():
             return False
@@ -53,15 +55,32 @@ class VisioVBAImporter:
             print(f"[DEBUG] Document map created: {list(self.document_map.keys())}")
         return True
 
+    # Maximum number of consecutive reconnect attempts before giving up.
+    # When _ensure_connection runs into a permanently broken COM channel
+    # (e.g. Visio crashed) this prevents an infinite retry loop.
+    _MAX_RECONNECT_ATTEMPTS = 3
+
     def _ensure_connection(self):
         try:
             _ = self.doc.Name
+            self._reconnect_attempts = 0
             return True
-        except Exception as e:
+        except (AttributeError, pythoncom.com_error) as e:
+            attempts = getattr(self, "_reconnect_attempts", 0) + 1
+            self._reconnect_attempts = attempts
+            if attempts > self._MAX_RECONNECT_ATTEMPTS:
+                from .exceptions import COMConnectionError
+                raise COMConnectionError(self._MAX_RECONNECT_ATTEMPTS, e) from e
             if self.debug and not self.silent_reconnect:
-                print(f"[DEBUG] Connection lost ({type(e).__name__}: {e}), attempting to reconnect...")
+                print(
+                    f"[DEBUG] Connection lost ({type(e).__name__}: {e}); "
+                    f"reconnect attempt {attempts}/{self._MAX_RECONNECT_ATTEMPTS}"
+                )
             elif not self.debug and not self.silent_reconnect:
-                print("🔄 Connection lost, attempting to reconnect...")
+                print(
+                    f"🔄 Connection lost, attempting to reconnect "
+                    f"({attempts}/{self._MAX_RECONNECT_ATTEMPTS})..."
+                )
             return self.connect_to_visio()
 
     def _find_document_for_file(self, file_path):
@@ -166,13 +185,39 @@ class VisioVBAImporter:
 
         return content
 
+    @staticmethod
+    def _decode_with_bom_detection(file_path, fallback_codepage):
+        """Read ``file_path`` as text, detecting any UTF-8/UTF-16 BOM upfront.
+
+        VS Code, PowerShell and a few editors will happily prepend a UTF-8
+        BOM (\\xef\\xbb\\xbf) or a UTF-16 BOM to a saved ``.bas`` file.
+        Without explicit detection that BOM bleeds through into the VBA
+        module name and breaks the import. We strip the BOM here once and
+        return clean text in NFC form.
+        """
+
+        import codecs
+
+        raw = file_path.read_bytes()
+
+        if raw.startswith(codecs.BOM_UTF8):
+            return raw[len(codecs.BOM_UTF8):].decode("utf-8")
+        if raw.startswith(codecs.BOM_UTF16_LE):
+            return raw[len(codecs.BOM_UTF16_LE):].decode("utf-16-le")
+        if raw.startswith(codecs.BOM_UTF16_BE):
+            return raw[len(codecs.BOM_UTF16_BE):].decode("utf-16-be")
+
+        # No BOM: try UTF-8 first (modern editors save without BOM by
+        # default), then fall back to the document's codepage.
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw.decode(fallback_codepage, errors="replace")
+
     def _create_temp_codepage_file(self, file_path, codepage, doc_info=None):
         """Create a temporary file with configured encoding for VBA import."""
         import tempfile
-        try:
-            text = file_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            text = file_path.read_text(encoding=codepage)
+        text = self._decode_with_bom_detection(file_path, codepage)
 
         # Handle Rubberduck annotations
         if self.use_rubberduck and doc_info:

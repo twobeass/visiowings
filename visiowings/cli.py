@@ -2,26 +2,89 @@
 Now supports multiple documents (drawings + stencils)
 Extended: 'edit' command with --sync-delete-modules
 """
+from __future__ import annotations
+
 import argparse
+import codecs
+import logging
+import os
+import sys
 from pathlib import Path
 
+from . import __version__
+from ._logging import setup_logging
+from .exceptions import (
+    InvalidVisioFileError,
+    UnsupportedEncodingError,
+    VisiowingsError,
+)
 from .file_watcher import VBAWatcher
 from .vba_export import VisioVBAExporter
 from .vba_import import VisioVBAImporter
 
+logger = logging.getLogger("visiowings.cli")
 
+
+# --------------------------------------------------------------------------- #
+# Validation helpers
+# --------------------------------------------------------------------------- #
+def _validate_visio_file(path: Path) -> Path:
+    """Resolve and validate a Visio file path, raising on bad input."""
+
+    resolved = path.resolve()
+    if resolved.suffix.lower() not in InvalidVisioFileError.SUPPORTED_SUFFIXES:
+        raise InvalidVisioFileError(str(resolved))
+    if not resolved.exists():
+        # Mirror the historical error message to stay friendly. The CLI
+        # prints `exc.message` so the user sees this verbatim.
+        from .exceptions import DocumentNotFoundError
+
+        raise DocumentNotFoundError(str(resolved))
+    return resolved
+
+
+def _validate_codepage(name: str | None) -> str | None:
+    if not name:
+        return None
+    try:
+        codecs.lookup(name)
+    except LookupError as exc:
+        raise UnsupportedEncodingError(name) from exc
+    return name
+
+
+def _validate_writable_dir(path: Path, *, label: str) -> Path:
+    """Resolve a directory and ensure it exists and is writable."""
+
+    resolved = path.resolve()
+    resolved.mkdir(parents=True, exist_ok=True)
+    if not os.access(resolved, os.W_OK):
+        raise VisiowingsError(f"{label} is not writable: {resolved}")
+    return resolved
+
+
+def _validate_readable_dir(path: Path, *, label: str) -> Path:
+    resolved = path.resolve()
+    if not resolved.exists():
+        raise VisiowingsError(f"{label} does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise VisiowingsError(f"{label} is not a directory: {resolved}")
+    if not os.access(resolved, os.R_OK):
+        raise VisiowingsError(f"{label} is not readable: {resolved}")
+    return resolved
+
+
+# --------------------------------------------------------------------------- #
+# Subcommands
+# --------------------------------------------------------------------------- #
 def cmd_edit(args):
     """Edit command: Export + Watch + Import with live sync"""
-    visio_file = Path(args.file).resolve()
-    output_dir = Path(args.output or '.').resolve()
-    debug = getattr(args, 'debug', False)
-    sync_delete_modules = getattr(args, 'sync_delete_modules', False)
-    codepage = getattr(args, 'codepage', None)
-    use_rubberduck = getattr(args, 'rubberduck', False)
-
-    if not visio_file.exists():
-        print(f"❌ File not found: {visio_file}")
-        return
+    visio_file = _validate_visio_file(Path(args.file))
+    output_dir = _validate_writable_dir(Path(args.output or "."), label="--output")
+    debug = getattr(args, "debug", False)
+    sync_delete_modules = getattr(args, "sync_delete_modules", False)
+    codepage = _validate_codepage(getattr(args, "codepage", None))
+    use_rubberduck = getattr(args, "rubberduck", False)
 
     print(f"📂 Visio file: {visio_file}")
     print(f"📁 Export directory: {output_dir}")
@@ -79,13 +142,14 @@ def cmd_edit(args):
     watcher.last_export_hashes = all_hashes  # Fix: Transfer initial export hash to watcher
     watcher.start()
 
+
 def cmd_export(args):
     """Export command: Export VBA modules only"""
-    visio_file = Path(args.file).resolve()
-    output_dir = Path(args.output or '.').resolve()
-    debug = getattr(args, 'debug', False)
-    codepage = getattr(args, 'codepage', None)
-    use_rubberduck = getattr(args, 'rubberduck', False)
+    visio_file = _validate_visio_file(Path(args.file))
+    output_dir = _validate_writable_dir(Path(args.output or "."), label="--output")
+    debug = getattr(args, "debug", False)
+    codepage = _validate_codepage(getattr(args, "codepage", None))
+    use_rubberduck = getattr(args, "rubberduck", False)
 
     if use_rubberduck:
         print("🦆 Rubberduck integration enabled (folder annotations)")
@@ -113,13 +177,14 @@ def cmd_export(args):
                 for doc_folder, doc_hash in all_hashes.items():
                     print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
 
+
 def cmd_import(args):
     """Import command: Import VBA modules only"""
-    visio_file = Path(args.file).resolve()
-    input_dir = Path(args.input or '.').resolve()
-    debug = getattr(args, 'debug', False)
-    codepage = getattr(args, 'codepage', None)
-    use_rubberduck = getattr(args, 'rubberduck', False)
+    visio_file = _validate_visio_file(Path(args.file))
+    input_dir = _validate_readable_dir(Path(args.input or "."), label="--input")
+    debug = getattr(args, "debug", False)
+    codepage = _validate_codepage(getattr(args, "codepage", None))
+    use_rubberduck = getattr(args, "rubberduck", False)
 
     if use_rubberduck:
         print("🦆 Rubberduck integration enabled (folder annotations)")
@@ -134,13 +199,23 @@ def cmd_import(args):
     else:
         print("\n⚠️  No modules imported (or all skipped)")
 
-def main():
+
+# --------------------------------------------------------------------------- #
+# Argument parser
+# --------------------------------------------------------------------------- #
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description='visiowings - VBA Editor for Visio with VS Code Integration (Multi-Document Support)',
-        epilog='Example: visiowings edit --file document.vsdx --force --bidirectional --debug'
+        prog="visiowings",
+        description="visiowings - VBA Editor for Visio with VS Code Integration (Multi-Document Support)",
+        epilog="Example: visiowings edit --file document.vsdx --force --bidirectional --debug",
+    )
+    parser.add_argument(
+        "--version", "-V",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Edit command
     edit_parser = subparsers.add_parser(
@@ -232,23 +307,48 @@ def main():
         help='Use Rubberduck @Folder annotations for directory structure'
     )
 
+    return parser
+
+
+# --------------------------------------------------------------------------- #
+# Entry point
+# --------------------------------------------------------------------------- #
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
     # If no arguments are passed, start interactive menu
-    import sys
-    if len(sys.argv) == 1:
+    if not argv:
         from .interactive import interactive_menu
         interactive_menu()
-        return
+        return 0
 
-    args = parser.parse_args()
+    parser = _build_parser()
+    args = parser.parse_args(argv)
 
-    if args.command == 'edit':
-        cmd_edit(args)
-    elif args.command == 'export':
-        cmd_export(args)
-    elif args.command == 'import':
-        cmd_import(args)
-    else:
-        parser.print_help()
+    setup_logging(debug=getattr(args, "debug", False))
+
+    try:
+        if args.command == 'edit':
+            cmd_edit(args)
+        elif args.command == 'export':
+            cmd_export(args)
+        elif args.command == 'import':
+            cmd_import(args)
+        else:
+            parser.print_help()
+            return 0
+    except VisiowingsError as exc:
+        # User-facing message only; full traceback only in --debug mode.
+        sys.stderr.write(f"❌ {exc.message}\n")
+        if getattr(args, "debug", False):
+            logger.exception("Traceback (--debug):")
+        return 1
+    except KeyboardInterrupt:
+        sys.stderr.write("\n⏹  Interrupted by user.\n")
+        return 130
+
+    return 0
+
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

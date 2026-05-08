@@ -63,8 +63,11 @@ class VisioDocumentInfo:
             vb_project = self.doc.VBProject
             if vb_project and vb_project.VBComponents.Count > 0:
                 return True
-        except:
-            pass
+        except (AttributeError, pythoncom.com_error) as e:
+            # AttributeError: VBProject is not exposed (e.g. trust center
+            # disallows VBA access). com_error: VBA disabled for this doc.
+            if self.debug:
+                print(f"[DEBUG] No VBProject for {self.name}: {type(e).__name__}: {e}")
         return False
 
     def get_type_name(self):
@@ -92,16 +95,17 @@ class VisioDocumentManager:
     def connect_to_visio(self):
         """Connect to Visio and discover all open documents"""
         try:
-            # Ensure COM is initialized in this thread
+            # Ensure COM is initialized in this thread.
+            # CoInitialize raises com_error if the apartment is already set
+            # to a conflicting threading model (RPC_E_CHANGED_MODE); that's
+            # fine - it just means somebody initialised it ahead of us.
             try:
                 pythoncom.CoInitialize()
                 if self.debug:
                     print("[DEBUG] COM initialized in document_manager")
-            except:
-                # Already initialized, that's fine
+            except pythoncom.com_error as e:
                 if self.debug:
-                    print("[DEBUG] COM already initialized in document_manager")
-                pass
+                    print(f"[DEBUG] COM already initialized in document_manager ({e})")
 
             self.visio_app = win32com.client.Dispatch("Visio.Application")
 

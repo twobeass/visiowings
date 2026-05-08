@@ -470,11 +470,14 @@ class VisioVBAExporter:
                 # Cleanup empty directories
                 if self.use_rubberduck:
                     for dirpath, dirnames, filenames in os.walk(doc_output_path, topdown=False):
-                         if not dirnames and not filenames and dirpath != str(doc_output_path):
-                             try:
-                                 os.rmdir(dirpath)
-                             except:
-                                 pass
+                        if not dirnames and not filenames and dirpath != str(doc_output_path):
+                            try:
+                                os.rmdir(dirpath)
+                            except OSError as e:
+                                # rmdir fails on non-empty dirs, missing dirs,
+                                # or insufficient permissions - all benign here.
+                                if getattr(self, "debug", False):
+                                    print(f"[DEBUG] Could not remove {dirpath}: {e}")
 
             elif response == 'i':
                 print(f"\n📤 Importing {len(files_to_delete)} file(s) to Visio...")
