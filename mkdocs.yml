@@ -115,6 +115,7 @@ nav:
     - CLI: components/cli.md
     - Document Manager: components/document-manager.md
   - Contributing:
+    - Development Environment: contributing/development-environment.md
     - Manual Testing: contributing/manual-testing.md
     - Releasing: contributing/releasing.md
     - Changelog: changelog.md

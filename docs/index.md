@@ -47,9 +47,17 @@ support, and modern tooling. Inspired by [xlwings](https://www.xlwings.org/).
 
     ---
 
-    The fully automated release pipeline.
+    The fully automated release pipeline (Sigstore + Trusted Publishing).
 
     [:octicons-arrow-right-24: Releasing](contributing/releasing.md)
+
+- :material-tools:{ .lg .middle } **Dev environment**
+
+    ---
+
+    `just` recipes, `nox` matrix, pre-commit, shared editor config.
+
+    [:octicons-arrow-right-24: Development environment](contributing/development-environment.md)
 
 </div>
 

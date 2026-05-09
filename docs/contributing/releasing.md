@@ -17,12 +17,53 @@ need to merge pull requests; the rest is handled by GitHub Actions.
    - Builds the standalone Windows EXE via PyInstaller, smoke-tests it,
      and attaches it to the Release.
    - Generates a CycloneDX SBOM (`sbom.cdx.json`) and a license report
-     (`licenses.json`) and attaches them to the Release.
+     (`licenses.json`).
+   - **Signs both with Sigstore** via keyless OIDC, producing
+     `sbom.cdx.json.sigstore` and `licenses.json.sigstore` bundles, and
+     attaches them to the Release.
    - Uploads the wheel + sdist to PyPI via OIDC Trusted Publishing — no
      long-lived API token required.
 
 The whole pipeline is idempotent and re-runnable through
 `workflow_dispatch`.
+
+## Verifying a release
+
+Every release artefact can be verified offline by anyone — no maintainer
+key required, since Sigstore uses short-lived certificates tied to the
+GitHub Actions OIDC identity.
+
+```bash
+pip install sigstore     # one-time
+
+# Download the artefact and its .sigstore bundle from the Release page,
+# then verify:
+sigstore verify github \
+    --bundle sbom.cdx.json.sigstore \
+    --cert-identity 'https://github.com/twobeass/visiowings/.github/workflows/publish.yml@refs/tags/vX.Y.Z' \
+    --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
+    sbom.cdx.json
+```
+
+A successful run prints `OK: sbom.cdx.json` and proves the file was
+produced by `publish.yml` running on the `vX.Y.Z` tag.
+
+## Supply-chain posture: OpenSSF Scorecard
+
+`.github/workflows/scorecard.yml` runs the
+[OpenSSF Scorecard](https://github.com/ossf/scorecard) every Monday and
+on every push to `main`. Results are uploaded to GitHub
+**code-scanning** (Security tab → Code scanning alerts) so regressions
+in branch protection, pinned actions, signed releases, etc. show up
+alongside CodeQL findings.
+
+To run a local Scorecard against the public repo:
+
+```bash
+docker run --rm -e GITHUB_AUTH_TOKEN=$GITHUB_TOKEN \
+    gcr.io/openssf/scorecard:stable \
+    --repo=github.com/twobeass/visiowings
+```
 
 ## One-time setup: PyPI Trusted Publishing
 

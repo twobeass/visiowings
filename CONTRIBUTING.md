@@ -20,8 +20,28 @@ pre-commit install
 pre-commit install --hook-type commit-msg
 ```
 
+If you have [`just`](https://just.systems) installed, the same setup is one
+command:
+
+```bash
+just install
+```
+
 `visiowings` itself only runs on Windows (it talks to Visio via COM), but most
 unit tests run on Linux and macOS thanks to mocked `pywin32` interfaces.
+
+## Editor setup
+
+The repo ships shared VS Code workspace settings in `.vscode/`:
+
+- `settings.json` — Ruff format-on-save, import sorting, mypy daemon,
+  pytest discovery, sane `files.*` defaults.
+- `extensions.json` — recommended extensions (Ruff, Python, Pylance,
+  mypy, EditorConfig, GitHub Actions, …). VS Code prompts you to install
+  them on first open.
+
+Per-user state (`.vscode/launch.json`, history, etc.) is intentionally
+ignored via `.gitignore` — only the two files above are committed.
 
 ## Branching
 
@@ -49,6 +69,8 @@ The release pipeline (`release-please`) reads these commits to generate
 
 ## Running checks locally
 
+The raw commands:
+
 ```bash
 # Format + lint + import-sort
 ruff check --fix .
@@ -64,8 +86,34 @@ pytest
 pre-commit run --all-files
 ```
 
-CI runs the same commands. If `pre-commit run --all-files` is green locally,
-CI is almost certainly going to be green too.
+…or, with `just`, the recipes that wrap them:
+
+```bash
+just lint      # ruff check + ruff format --check + mypy
+just fmt       # ruff check --fix + ruff format
+just test      # full pytest run (mirrors CI)
+just test-fast # skips windows_only + slow
+just security  # pip-audit --strict + bandit
+just pc        # pre-commit run --all-files
+just docs-serve  # live-reload docs preview
+```
+
+Run `just` (no args) to list every recipe. CI runs the same commands —
+if `just lint` and `just test` are green locally, CI almost certainly is too.
+
+### Cross-Python testing with nox
+
+CI tests against Python 3.10–3.13. To reproduce the same matrix locally
+(any interpreter you have installed will be used; missing ones are
+skipped):
+
+```bash
+pip install nox     # one-time
+nox                 # default sessions: lint + type_check + tests
+nox -s tests        # tests on every available 3.10–3.13
+nox -s tests -- -k encoding   # forward args to pytest
+nox -l              # list every session
+```
 
 ## Testing on Windows with real Visio
 
