@@ -92,8 +92,13 @@ def test_force_color_env_enables_color(monkeypatch):
 def test_coloring_formatter_passthrough_when_disabled():
     fmt = ColoringFormatter(fmt="%(message)s", color=False)
     record = logging.LogRecord(
-        name="x", level=logging.ERROR, pathname="x", lineno=1,
-        msg="boom", args=(), exc_info=None,
+        name="x",
+        level=logging.ERROR,
+        pathname="x",
+        lineno=1,
+        msg="boom",
+        args=(),
+        exc_info=None,
     )
     assert fmt.format(record) == "boom"
 
@@ -101,8 +106,13 @@ def test_coloring_formatter_passthrough_when_disabled():
 def test_coloring_formatter_no_style_for_unknown_level():
     fmt = ColoringFormatter(fmt="%(message)s", color=True)
     record = logging.LogRecord(
-        name="x", level=logging.NOTSET, pathname="x", lineno=1,
-        msg="meh", args=(), exc_info=None,
+        name="x",
+        level=logging.NOTSET,
+        pathname="x",
+        lineno=1,
+        msg="meh",
+        args=(),
+        exc_info=None,
     )
     # NOTSET (0) has no style entry, output should be unchanged.
     assert fmt.format(record) == "meh"

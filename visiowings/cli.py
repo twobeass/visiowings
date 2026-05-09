@@ -2,6 +2,7 @@
 Now supports multiple documents (drawings + stencils)
 Extended: 'edit' command with --sync-delete-modules
 """
+
 from __future__ import annotations
 
 import argparse
@@ -122,7 +123,7 @@ def cmd_edit(args):
         debug=debug,
         user_codepage=codepage,
         use_rubberduck=use_rubberduck,
-        force_export_frx=getattr(args, 'export_frx', False)
+        force_export_frx=getattr(args, "export_frx", False),
     )
     if not exporter.connect_to_visio():
         return
@@ -148,7 +149,14 @@ def cmd_edit(args):
             print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
 
     print("\n=== Starting Live Synchronization ===")
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, silent_reconnect=True, user_codepage=codepage, use_rubberduck=use_rubberduck)
+    importer = VisioVBAImporter(
+        str(visio_file),
+        force_document=args.force,
+        debug=debug,
+        silent_reconnect=True,
+        user_codepage=codepage,
+        use_rubberduck=use_rubberduck,
+    )
     if not importer.connect_to_visio():
         return
 
@@ -156,9 +164,9 @@ def cmd_edit(args):
         output_dir,
         importer,
         exporter=exporter,
-        bidirectional=getattr(args, 'bidirectional', False),
+        bidirectional=getattr(args, "bidirectional", False),
         debug=debug,
-        sync_delete_modules=sync_delete_modules
+        sync_delete_modules=sync_delete_modules,
     )
     watcher.last_export_hashes = all_hashes  # Fix: Transfer initial export hash to watcher
     watcher.start()
@@ -180,7 +188,7 @@ def cmd_export(args):
         debug=debug,
         user_codepage=codepage,
         use_rubberduck=use_rubberduck,
-        force_export_frx=getattr(args, 'export_frx', False)
+        force_export_frx=getattr(args, "export_frx", False),
     )
     if exporter.connect_to_visio():
         all_exported, all_hashes = exporter.export_modules(output_dir)
@@ -240,9 +248,9 @@ def cmd_init(args):
         print("(No documents detected via COM. You can still enter a path manually.)\n")
         main_file = input("Path to Visio file: ").strip()
 
-    output_dir = (input("Output directory for VBA files [vba]: ").strip() or "vba")
-    bidir = (input("Enable bidirectional sync (y/N)? ").strip().lower() == "y")
-    rubberduck = (input("Use Rubberduck @Folder annotations (y/N)? ").strip().lower() == "y")
+    output_dir = input("Output directory for VBA files [vba]: ").strip() or "vba"
+    bidir = input("Enable bidirectional sync (y/N)? ").strip().lower() == "y"
+    rubberduck = input("Use Rubberduck @Folder annotations (y/N)? ").strip().lower() == "y"
     codepage = input("Codepage (blank = auto-detect): ").strip() or None
 
     cfg = VisiowingsConfig(
@@ -261,8 +269,8 @@ def _discover_open_documents() -> list[str]:
     """Best-effort listing of open Visio documents — empty list on non-Windows."""
 
     try:
-        import pythoncom  # type: ignore[import-not-found]
-        import win32com.client  # type: ignore[import-not-found]
+        import pythoncom
+        import win32com.client
 
         try:
             pythoncom.CoInitialize()
@@ -274,7 +282,7 @@ def _discover_open_documents() -> list[str]:
         except Exception:
             return []
         return [doc.FullName for doc in visio.Documents]
-    except Exception as e:  # noqa: BLE001 - best-effort discovery
+    except Exception as e:
         logger.debug("Could not enumerate Visio documents: %s", e)
         return []
 
@@ -290,7 +298,13 @@ def cmd_import(args):
     if use_rubberduck:
         print("🦆 Rubberduck integration enabled (folder annotations)")
 
-    importer = VisioVBAImporter(str(visio_file), force_document=args.force, debug=debug, user_codepage=codepage, use_rubberduck=use_rubberduck)
+    importer = VisioVBAImporter(
+        str(visio_file),
+        force_document=args.force,
+        debug=debug,
+        user_codepage=codepage,
+        use_rubberduck=use_rubberduck,
+    )
 
     # Use new batch import method
     imported_count = importer.import_modules_from_dir(input_dir)
@@ -311,7 +325,8 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="Example: visiowings edit --file document.vsdx --force --bidirectional --debug",
     )
     parser.add_argument(
-        "--version", "-V",
+        "--version",
+        "-V",
         action="version",
         version=f"%(prog)s {__version__}",
     )
@@ -336,92 +351,103 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Edit command
     edit_parser = subparsers.add_parser(
-        'edit',
-        help='Edit VBA modules with live sync (VS Code <-> Visio)'
-    )
-    edit_parser.add_argument('--file', '-f', help='Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml')
-    edit_parser.add_argument('--output', '-o', help='Export directory (default: current directory)')
-    edit_parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Overwrite document modules (ThisDocument.cls)'
+        "edit", help="Edit VBA modules with live sync (VS Code <-> Visio)"
     )
     edit_parser.add_argument(
-        '--bidirectional',
-        action='store_true',
-        help='Bidirectional sync: Automatically export changes from Visio to VS Code'
+        "--file",
+        "-f",
+        help="Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml",
+    )
+    edit_parser.add_argument("--output", "-o", help="Export directory (default: current directory)")
+    edit_parser.add_argument(
+        "--force", action="store_true", help="Overwrite document modules (ThisDocument.cls)"
     )
     edit_parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='Debug mode: Verbose logging output'
+        "--bidirectional",
+        action="store_true",
+        help="Bidirectional sync: Automatically export changes from Visio to VS Code",
     )
     edit_parser.add_argument(
-        '--sync-delete-modules',
-        action='store_true',
-        help='Automatically delete Visio modules when local .bas/.cls/.frm files are deleted'
+        "--debug", action="store_true", help="Debug mode: Verbose logging output"
     )
     edit_parser.add_argument(
-        '--codepage', '--cp',
-        help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
+        "--sync-delete-modules",
+        action="store_true",
+        help="Automatically delete Visio modules when local .bas/.cls/.frm files are deleted",
     )
     edit_parser.add_argument(
-        '--rubberduck', '--rd',
-        action='store_true',
-        help='Use Rubberduck @Folder annotations for directory structure'
+        "--codepage",
+        "--cp",
+        help="VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document",
     )
     edit_parser.add_argument(
-        '--export-frx',
-        action='store_true',
-        help='Force export of .frx files even if .frm code has not changed'
+        "--rubberduck",
+        "--rd",
+        action="store_true",
+        help="Use Rubberduck @Folder annotations for directory structure",
+    )
+    edit_parser.add_argument(
+        "--export-frx",
+        action="store_true",
+        help="Force export of .frx files even if .frm code has not changed",
     )
 
     # Export command
-    export_parser = subparsers.add_parser('export', help='Export VBA modules (one-time)')
-    export_parser.add_argument('--file', '-f', help='Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml')
-    export_parser.add_argument('--output', '-o', help='Export directory (default: current directory)')
+    export_parser = subparsers.add_parser("export", help="Export VBA modules (one-time)")
     export_parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='Debug mode: Verbose logging output'
+        "--file",
+        "-f",
+        help="Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml",
     )
     export_parser.add_argument(
-        '--codepage', '--cp',
-        help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
+        "--output", "-o", help="Export directory (default: current directory)"
     )
     export_parser.add_argument(
-        '--rubberduck', '--rd',
-        action='store_true',
-        help='Use Rubberduck @Folder annotations for directory structure'
+        "--debug", action="store_true", help="Debug mode: Verbose logging output"
     )
     export_parser.add_argument(
-        '--export-frx',
-        action='store_true',
-        help='Force export of .frx files even if .frm code has not changed'
+        "--codepage",
+        "--cp",
+        help="VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document",
+    )
+    export_parser.add_argument(
+        "--rubberduck",
+        "--rd",
+        action="store_true",
+        help="Use Rubberduck @Folder annotations for directory structure",
+    )
+    export_parser.add_argument(
+        "--export-frx",
+        action="store_true",
+        help="Force export of .frx files even if .frm code has not changed",
     )
 
     # Import command
-    import_parser = subparsers.add_parser('import', help='Import VBA modules (one-time)')
-    import_parser.add_argument('--file', '-f', help='Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml')
-    import_parser.add_argument('--input', '-i', help='Import directory (default: current directory)')
+    import_parser = subparsers.add_parser("import", help="Import VBA modules (one-time)")
     import_parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Overwrite document modules (ThisDocument.cls)'
+        "--file",
+        "-f",
+        help="Visio file (.vsdm, .vsdx, .vstm, .vstx) - falls back to .visiowings.toml",
     )
     import_parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='Debug mode: Verbose logging output'
+        "--input", "-i", help="Import directory (default: current directory)"
     )
     import_parser.add_argument(
-        '--codepage', '--cp',
-        help='VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document'
+        "--force", action="store_true", help="Overwrite document modules (ThisDocument.cls)"
     )
     import_parser.add_argument(
-        '--rubberduck', '--rd',
-        action='store_true',
-        help='Use Rubberduck @Folder annotations for directory structure'
+        "--debug", action="store_true", help="Debug mode: Verbose logging output"
+    )
+    import_parser.add_argument(
+        "--codepage",
+        "--cp",
+        help="VBA file codepage (e.g., cp1252=Western, cp1251=Cyrillic, cp1250=Central EU, cp936=Chinese). Default: auto-detect from document",
+    )
+    import_parser.add_argument(
+        "--rubberduck",
+        "--rd",
+        action="store_true",
+        help="Use Rubberduck @Folder annotations for directory structure",
     )
 
     return parser
@@ -436,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     # If no arguments are passed, start interactive menu
     if not argv:
         from .interactive import interactive_menu
+
         interactive_menu()
         return 0
 
@@ -452,7 +479,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command not in (None, "init"):
         try:
             cfg = load_config()
-        except Exception as e:  # noqa: BLE001 - bad config should not crash
+        except Exception as e:
             logger.warning("Could not read .visiowings.toml: %s", e)
             cfg = VisiowingsConfig()
         _apply_config_defaults(args, cfg)
@@ -462,13 +489,13 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--file is required (or set `file = ...` in .visiowings.toml)")
 
     try:
-        if args.command == 'init':
+        if args.command == "init":
             cmd_init(args)
-        elif args.command == 'edit':
+        elif args.command == "edit":
             cmd_edit(args)
-        elif args.command == 'export':
+        elif args.command == "export":
             cmd_export(args)
-        elif args.command == 'import':
+        elif args.command == "import":
             cmd_import(args)
         else:
             parser.print_help()
@@ -486,5 +513,5 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

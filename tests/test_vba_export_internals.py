@@ -32,11 +32,7 @@ class TestStripVbaHeaderExport:
 
     def test_drops_vb_name_for_comparison(self):
         exporter = VisioVBAExporter("dummy.vsdm")
-        code = (
-            'Attribute VB_Name = "Foo"\n'
-            "Sub Bar()\n"
-            "End Sub\n"
-        )
+        code = 'Attribute VB_Name = "Foo"\nSub Bar()\nEnd Sub\n'
         cleaned = exporter._strip_vba_header_export(code, keep_vb_name=False)
         assert "Attribute VB_Name" not in cleaned
         assert "Sub Bar()" in cleaned
@@ -75,15 +71,15 @@ class TestExtractFolderAnnotation:
         return VisioVBAExporter("dummy.vsdm", use_rubberduck=True)
 
     def test_extracts_simple_annotation(self, exporter):
-        code = "'@Folder(\"Main\")\nOption Explicit\n"
+        code = '\'@Folder("Main")\nOption Explicit\n'
         assert exporter._extract_folder_annotation(code) == "Main"
 
     def test_extracts_dotted_annotation(self, exporter):
-        code = "'@Folder(\"Main.Sub.Deep\")\n"
+        code = '\'@Folder("Main.Sub.Deep")\n'
         assert exporter._extract_folder_annotation(code) == "Main/Sub/Deep"
 
     def test_handles_whitespace_variants(self, exporter):
-        code = "'@Folder ( \"My Folder\" )\n"
+        code = '\'@Folder ( "My Folder" )\n'
         assert exporter._extract_folder_annotation(code) == "My Folder"
 
     def test_returns_none_when_no_annotation_present(self, exporter):
@@ -92,7 +88,7 @@ class TestExtractFolderAnnotation:
 
     def test_returns_none_when_rubberduck_disabled(self):
         exporter = VisioVBAExporter("dummy.vsdm", use_rubberduck=False)
-        code = "'@Folder(\"Main\")\nOption Explicit\n"
+        code = '\'@Folder("Main")\nOption Explicit\n'
         # The exporter only honors @Folder when use_rubberduck=True
         # (the function still parses, but downstream callers should ignore).
         # If the implementation gates extraction internally, accept None.

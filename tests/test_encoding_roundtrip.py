@@ -11,7 +11,6 @@ import pytest
 
 from visiowings.encoding import LCID_TO_CODEPAGE
 
-
 # --------------------------------------------------------------------------- #
 # Sample strings exercising codepage-specific characters.
 # Picking characters that are valid in the given codepage and exotic enough
@@ -32,11 +31,11 @@ SAMPLES: dict[str, str] = {
     # cp1258 needs decomposed combining diacritics (NFD) for vowels with
     # multiple marks; using NFC precomposed forms (e.g. U+1EBF) would fail.
     "cp1258": "Xin chao, Tieng Viet, dadaeoouw - VN: ô ê",
-    "cp874":  "Sawatdi chao lok - phasa thai - สวัสดีชาวโลก",
-    "cp932":  "Konnichiwa sekai, nihongo, kanji kana, こんにちは世界",
-    "cp936":  "Ni hao shijie, jianti zhongwen, Beijing, 你好世界",
-    "cp949":  "Annyeonghaseyo, hangugeo, Seoul, 안녕하세요 한국어",
-    "cp950":  "Ni hao shijie, fanti zhongwen, Taipei, 你好世界",
+    "cp874": "Sawatdi chao lok - phasa thai - สวัสดีชาวโลก",
+    "cp932": "Konnichiwa sekai, nihongo, kanji kana, こんにちは世界",
+    "cp936": "Ni hao shijie, jianti zhongwen, Beijing, 你好世界",
+    "cp949": "Annyeonghaseyo, hangugeo, Seoul, 안녕하세요 한국어",
+    "cp950": "Ni hao shijie, fanti zhongwen, Taipei, 你好世界",
 }
 
 # All unique codepages present in the LCID table.

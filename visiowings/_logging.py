@@ -14,10 +14,10 @@ from typing import TextIO
 
 _RESET = "\x1b[0m"
 _LEVEL_STYLES: dict[int, str] = {
-    logging.DEBUG: "\x1b[2m",      # dim
+    logging.DEBUG: "\x1b[2m",  # dim
     logging.INFO: "",
-    logging.WARNING: "\x1b[33m",   # yellow
-    logging.ERROR: "\x1b[31m",     # red
+    logging.WARNING: "\x1b[33m",  # yellow
+    logging.ERROR: "\x1b[31m",  # red
     logging.CRITICAL: "\x1b[1;31m",  # bold red
 }
 

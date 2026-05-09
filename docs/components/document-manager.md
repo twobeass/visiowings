@@ -94,12 +94,12 @@ def _get_document_type(doc) -> str:
 def _generate_folder_name(doc_name: str) -> str:
     # Remove extension
     base_name = Path(doc_name).stem
-    
+
     # Sanitize for file system
     folder_name = base_name.lower()
     folder_name = folder_name.replace(' ', '_')
     folder_name = ''.join(c for c in folder_name if c.isalnum() or c == '_')
-    
+
     return folder_name
 ```
 
@@ -162,7 +162,7 @@ def has_vba_project(doc) -> bool:
 ```python
 for doc_info in manager.get_all_documents_with_vba():
     vb_project = doc_info.doc.VBProject
-    
+
     for component in vb_project.VBComponents:
         print(f"{doc_info.name}: {component.Name}")
 ```

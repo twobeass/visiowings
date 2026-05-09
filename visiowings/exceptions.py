@@ -60,8 +60,7 @@ class COMConnectionError(VisiowingsError):
         self.last_error = last_error
         suffix = f" Last error: {last_error!r}" if last_error else ""
         super().__init__(
-            f"Could not re-establish COM connection to Visio after "
-            f"{attempts} attempt(s).{suffix}"
+            f"Could not re-establish COM connection to Visio after {attempts} attempt(s).{suffix}"
         )
 
 
@@ -90,8 +89,7 @@ class InvalidVisioFileError(VisiowingsError):
     def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(
-            f"Not a Visio file: {path}. "
-            f"Supported extensions: {', '.join(self.SUPPORTED_SUFFIXES)}"
+            f"Not a Visio file: {path}. Supported extensions: {', '.join(self.SUPPORTED_SUFFIXES)}"
         )
 
 

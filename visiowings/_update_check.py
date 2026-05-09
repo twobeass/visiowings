@@ -47,7 +47,8 @@ def _load_cache() -> dict | None:
             return None
         if (time.time() - _CACHE_FILE.stat().st_mtime) > _CACHE_TTL_SECONDS:
             return None
-        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        loaded: dict = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        return loaded
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -62,12 +63,16 @@ def _save_cache(payload: dict) -> None:
 
 def _fetch_latest_version() -> str | None:
     try:
-        with urllib_request.urlopen(_PYPI_JSON_URL, timeout=_HTTP_TIMEOUT_SECONDS) as resp:
+        # _PYPI_JSON_URL is a hardcoded https:// constant, not user-controlled.
+        with urllib_request.urlopen(  # nosec B310
+            _PYPI_JSON_URL, timeout=_HTTP_TIMEOUT_SECONDS
+        ) as resp:
             data = json.load(resp)
     except (URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
         logger.debug("PyPI update check failed: %s", e)
         return None
-    return data.get("info", {}).get("version")
+    version = data.get("info", {}).get("version")
+    return version if isinstance(version, str) else None
 
 
 def _parse_version(v: str) -> tuple[int, ...]:

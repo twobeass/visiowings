@@ -111,9 +111,7 @@ def fake_app_no_vba():
     from tests._visio_mocks import FakeVisioDocument, make_visio_app
 
     return make_visio_app(
-        FakeVisioDocument(
-            name="Drawing1.vsdx", full_name="C:\\Docs\\Drawing1.vsdx", has_vba=False
-        )
+        FakeVisioDocument(name="Drawing1.vsdx", full_name="C:\\Docs\\Drawing1.vsdx", has_vba=False)
     )
 
 

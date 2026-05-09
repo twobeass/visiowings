@@ -8,16 +8,15 @@ from __future__ import annotations
 
 import pytest
 
-from visiowings.document_manager import (
-    VisioDocumentInfo,
-    VisioDocumentType,
-    sanitize_document_name,
-)
-
 from tests._visio_mocks import (
     FakeVBComponent,
     FakeVisioDocument,
     VBComponentType,
+)
+from visiowings.document_manager import (
+    VisioDocumentInfo,
+    VisioDocumentType,
+    sanitize_document_name,
 )
 
 
@@ -84,16 +83,12 @@ class TestVisioDocumentInfo:
         assert info.folder_name == "drawing1"
 
     def test_has_vba_false_when_no_components(self):
-        doc = FakeVisioDocument(
-            name="Empty.vsdm", full_name="C:\\Empty.vsdm", components=[]
-        )
+        doc = FakeVisioDocument(name="Empty.vsdm", full_name="C:\\Empty.vsdm", components=[])
         info = VisioDocumentInfo(doc)
         assert info.has_vba is False
 
     def test_has_vba_false_when_vbproject_missing(self):
-        doc = FakeVisioDocument(
-            name="NoVBA.vsdx", full_name="C:\\NoVBA.vsdx", has_vba=False
-        )
+        doc = FakeVisioDocument(name="NoVBA.vsdx", full_name="C:\\NoVBA.vsdx", has_vba=False)
         info = VisioDocumentInfo(doc)
         assert info.has_vba is False
 
@@ -112,9 +107,7 @@ class TestVisioDocumentInfo:
         assert info.get_type_name() == "Stencil"
 
     def test_get_type_name_unknown(self):
-        doc = FakeVisioDocument(
-            name="x.tmp", doc_type=999, components=[FakeVBComponent("M")]
-        )
+        doc = FakeVisioDocument(name="x.tmp", doc_type=999, components=[FakeVBComponent("M")])
         info = VisioDocumentInfo(doc)
         assert info.get_type_name() == "Unknown"
 

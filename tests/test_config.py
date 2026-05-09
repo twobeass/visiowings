@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from visiowings.config import (
@@ -85,7 +83,7 @@ def test_load_config_with_explicit_missing_path_raises(tmp_path):
 
 def test_unknown_keys_land_in_extras(tmp_path):
     target = tmp_path / CONFIG_FILENAME
-    target.write_text("future_flag = true\nfile = \"x.vsdm\"\n", encoding="utf-8")
+    target.write_text('future_flag = true\nfile = "x.vsdm"\n', encoding="utf-8")
     cfg = load_config(target)
     assert cfg.file == "x.vsdm"
     assert cfg.extras == {"future_flag": True}

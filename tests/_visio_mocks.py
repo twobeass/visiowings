@@ -23,16 +23,14 @@ Codes follow https://learn.microsoft.com/en-us/office/vba/api/vba.vbcomponents
 
 from __future__ import annotations
 
-from typing import Any
-
 
 class VBComponentType:
     """Mirrors VBA's ``vbext_ComponentType`` enum."""
 
-    STD_MODULE = 1     # vbext_ct_StdModule
-    CLASS_MODULE = 2   # vbext_ct_ClassModule
-    MS_FORM = 3        # vbext_ct_MSForm
-    DOCUMENT = 100     # vbext_ct_Document  (ThisDocument, sheets, ...)
+    STD_MODULE = 1  # vbext_ct_StdModule
+    CLASS_MODULE = 2  # vbext_ct_ClassModule
+    MS_FORM = 3  # vbext_ct_MSForm
+    DOCUMENT = 100  # vbext_ct_Document  (ThisDocument, sheets, ...)
 
 
 class VisioDocumentType:
@@ -95,7 +93,7 @@ class FakeVBComponent:
         self.Type = component_type
         self.CodeModule = FakeCodeModule(text)
 
-    def Export(self, path: str) -> None:  # noqa: N802 - mirrors COM method
+    def Export(self, path: str) -> None:
         from pathlib import Path
 
         Path(path).write_text(self.CodeModule.Lines(), encoding="cp1252")

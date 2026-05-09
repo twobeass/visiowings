@@ -11,10 +11,12 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from collections.abc import Callable
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from .exceptions import COMConnectionError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)

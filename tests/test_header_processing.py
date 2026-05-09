@@ -1,6 +1,6 @@
-import pytest
 from visiowings.vba_export import VisioVBAExporter
 from visiowings.vba_import import VisioVBAImporter
+
 
 class TestHeaderProcessing:
     def test_strip_vba_header_export(self):
@@ -25,11 +25,11 @@ End Sub"""
         # Test with keep_vb_name=True (default for .bas export)
         cleaned = exporter._strip_vba_header_export(code, keep_vb_name=True)
         assert 'Attribute VB_Name = "TestClass"' in cleaned
-        assert 'VERSION 1.0 CLASS' not in cleaned
-        assert 'BEGIN' not in cleaned
-        assert 'Attribute VB_GlobalNameSpace' not in cleaned
-        assert 'Option Explicit' in cleaned
-        assert 'Sub Test()' in cleaned
+        assert "VERSION 1.0 CLASS" not in cleaned
+        assert "BEGIN" not in cleaned
+        assert "Attribute VB_GlobalNameSpace" not in cleaned
+        assert "Option Explicit" in cleaned
+        assert "Sub Test()" in cleaned
 
         # Test with keep_vb_name=False (for comparison)
         cleaned_no_name = exporter._strip_vba_header_export(code, keep_vb_name=False)
@@ -47,9 +47,9 @@ End Sub"""
 
         # Import logic typically strips everything except code
         cleaned = importer._strip_vba_header(code, keep_vb_name=False)
-        assert 'Attribute VB_Name' not in cleaned
-        assert 'Option Explicit' in cleaned
-        assert 'Sub Test()' in cleaned
+        assert "Attribute VB_Name" not in cleaned
+        assert "Option Explicit" in cleaned
+        assert "Sub Test()" in cleaned
 
     def test_nested_begin_blocks(self):
         exporter = VisioVBAExporter("dummy.vsdm")
@@ -80,8 +80,8 @@ Private Sub CommandButton1_Click()
 End Sub"""
 
         cleaned = exporter._strip_vba_header_export(code, keep_vb_name=True)
-        assert 'Begin' not in cleaned
-        assert 'End' not in cleaned.splitlines()[0] # The block 'End' should be gone
-        assert 'Option Explicit' in cleaned
-        assert 'Private Sub CommandButton1_Click()' in cleaned
-        assert 'End Sub' in cleaned # This code 'End' should remain
+        assert "Begin" not in cleaned
+        assert "End" not in cleaned.splitlines()[0]  # The block 'End' should be gone
+        assert "Option Explicit" in cleaned
+        assert "Private Sub CommandButton1_Click()" in cleaned
+        assert "End Sub" in cleaned  # This code 'End' should remain

@@ -163,8 +163,12 @@ jobs:
           pip install -e .
           pip install pip-audit "bandit[toml]"
 
-      - name: Audit installed dependencies
-        run: pip-audit --strict
+      - name: Audit project dependencies
+        # Scope the audit to our declared deps (requirements.txt mirrors
+        # [project.dependencies]). Auditing the whole environment also
+        # catches vulnerabilities in scanner deps and runner-image
+        # packages, which we can't fix from this repo.
+        run: pip-audit --strict --requirement requirements.txt
 
       - name: Run bandit
         run: bandit -r visiowings/ -ll -f json -o bandit-report.json
@@ -189,7 +193,11 @@ jobs:
       - uses: actions/dependency-review-action@v4
         with:
           comment-summary-in-pr: on-failure
-          fail-on-severity: moderate
+          # `high` matches the action's default and is what most projects
+          # enforce. Optional dev/docs deps occasionally pick up moderate
+          # advisories (e.g. dev-only tooling) that aren't worth blocking
+          # contributor PRs over; those are still surfaced in the summary.
+          fail-on-severity: high
 
   # --------------------------------------------------------------------
   # Build sdist + wheel

@@ -1,11 +1,11 @@
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
+
 from visiowings.vba_export import VisioVBAExporter
 from visiowings.vba_import import VisioVBAImporter
 
-class TestRubberduckIntegration:
 
+class TestRubberduckIntegration:
     def test_extract_folder_annotation(self):
         exporter = VisioVBAExporter("dummy.vsdm", use_rubberduck=True)
 
@@ -44,11 +44,11 @@ End Sub"""
 
         new_content = importer._ensure_folder_annotation(content, file_path, doc_info)
         # Expect comment prefix
-        assert "'@Folder(\"Folder.Sub\")" in new_content
-        assert 'Option Explicit' in new_content
+        assert '\'@Folder("Folder.Sub")' in new_content
+        assert "Option Explicit" in new_content
 
         # Check position: Should be injected
-        assert "'@Folder(\"Folder.Sub\")" in new_content
+        assert '\'@Folder("Folder.Sub")' in new_content
 
     def test_ensure_folder_annotation_update(self):
         importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=True)
@@ -62,7 +62,7 @@ End Sub"""
 Option Explicit"""
 
         new_content = importer._ensure_folder_annotation(content, file_path, doc_info)
-        assert "'@Folder(\"NewLocation\")" in new_content
+        assert '\'@Folder("NewLocation")' in new_content
         assert "OldLocation" not in new_content
 
     def test_ensure_folder_annotation_root(self):
@@ -75,7 +75,7 @@ Option Explicit"""
         content = "Option Explicit"
 
         new_content = importer._ensure_folder_annotation(content, file_path, doc_info)
-        assert '@Folder' not in new_content
+        assert "@Folder" not in new_content
 
     def test_find_document_for_file_recursive(self):
         importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=True)

@@ -9,7 +9,6 @@ import pythoncom
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-
 # Watchdog dispatches events from a worker thread, so we have to guard the
 # debounce dict against concurrent reads/writes. A small LRU cap also avoids
 # unbounded memory growth in long-running sessions.
@@ -20,12 +19,12 @@ _DEBOUNCE_WINDOW_SECONDS = 1.0
 class VBAFileHandler(FileSystemEventHandler):
     def __init__(self, importer, watcher, extensions=None, debug=False, sync_delete_modules=False):
         if extensions is None:
-            extensions = ['.bas', '.cls', '.frm']
+            extensions = [".bas", ".cls", ".frm"]
         self.importer = importer
         self.watcher = watcher
         self.extensions = extensions
         self._debounce_lock = threading.Lock()
-        self._last_modified: "OrderedDict[str, float]" = OrderedDict()
+        self._last_modified: OrderedDict[str, float] = OrderedDict()
         self.debug = debug
         self.sync_delete_modules = sync_delete_modules
 
@@ -103,6 +102,7 @@ class VBAFileHandler(FileSystemEventHandler):
             print(f"❌ Error during import ({type(e).__name__}): {e}")
             if self.debug:
                 import traceback
+
                 traceback.print_exc()
 
     def on_deleted(self, event):
@@ -132,14 +132,17 @@ class VBAFileHandler(FileSystemEventHandler):
                 return
 
             module_name = file_path.stem
-            use_rubberduck = getattr(self.importer, 'use_rubberduck', False)
-            importer_threadlocal = VisioVBAImporter(self.importer.visio_file_path, debug=self.debug, use_rubberduck=use_rubberduck)
+            use_rubberduck = getattr(self.importer, "use_rubberduck", False)
+            importer_threadlocal = VisioVBAImporter(
+                self.importer.visio_file_path, debug=self.debug, use_rubberduck=use_rubberduck
+            )
 
             if not importer_threadlocal.connect_to_visio():
                 print("⚠️  Could not connect to Visio for module removal.")
                 return
 
             found_module = False
+            assert importer_threadlocal.doc_manager is not None
             for doc_info in importer_threadlocal.doc_manager.get_all_documents_with_vba():
                 try:
                     vb_project = doc_info.doc.VBProject
@@ -150,15 +153,23 @@ class VBAFileHandler(FileSystemEventHandler):
                             if comp.CodeModule.CountOfLines > 0:
                                 try:
                                     vb_project.VBComponents.Remove(comp)
-                                    print(f"✓ Removed Visio module: {module_name} ({doc_info.name})")
+                                    print(
+                                        f"✓ Removed Visio module: {module_name} ({doc_info.name})"
+                                    )
                                     if self.debug:
-                                        print(f"[DEBUG] Module '{module_name}' removed from '{doc_info.name}' due to local delete")
+                                        print(
+                                            f"[DEBUG] Module '{module_name}' removed from '{doc_info.name}' due to local delete"
+                                        )
                                 except (AttributeError, pythoncom.com_error) as e:
-                                    print(f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {type(e).__name__}: {e}")
+                                    print(
+                                        f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {type(e).__name__}: {e}"
+                                    )
                             break
                 except (AttributeError, pythoncom.com_error) as e:
                     if self.debug:
-                        print(f"[DEBUG] Error accessing document {doc_info.name}: {type(e).__name__}: {e}")
+                        print(
+                            f"[DEBUG] Error accessing document {doc_info.name}: {type(e).__name__}: {e}"
+                        )
 
             if not found_module and self.debug:
                 print(f"[DEBUG] Module '{module_name}' not found in any Visio document")
@@ -167,6 +178,7 @@ class VBAFileHandler(FileSystemEventHandler):
             if self.debug:
                 print(f"[DEBUG] Error in on_deleted handler: {type(e).__name__}: {e}")
                 import traceback
+
                 traceback.print_exc()
         finally:
             if com_initialized:
@@ -180,7 +192,15 @@ class VBAFileHandler(FileSystemEventHandler):
 
 
 class VBAWatcher:
-    def __init__(self, watch_directory, importer, exporter=None, bidirectional=False, debug=False, sync_delete_modules=False):
+    def __init__(
+        self,
+        watch_directory,
+        importer,
+        exporter=None,
+        bidirectional=False,
+        debug=False,
+        sync_delete_modules=False,
+    ):
         self.watch_directory = watch_directory
         self.importer = importer
         self.exporter = exporter
@@ -199,7 +219,7 @@ class VBAWatcher:
         self._shutdown = threading.Event()
 
         self.smart_poll_timer = None
-        self.last_vba_sync_time = 0
+        self.last_vba_sync_time: float = 0.0
         self.last_export_hashes = {}  # Track hash per document: {doc_folder: hash}
         self.doc = importer.doc
         self.sync_delete_modules = sync_delete_modules
@@ -252,18 +272,24 @@ class VBAWatcher:
                 if self.debug:
                     print("[DEBUG] Restarting observer...")
                 try:
-                    event_handler = VBAFileHandler(self.importer, self, debug=self.debug, sync_delete_modules=self.sync_delete_modules)
+                    event_handler = VBAFileHandler(
+                        self.importer,
+                        self,
+                        debug=self.debug,
+                        sync_delete_modules=self.sync_delete_modules,
+                    )
                     self.observer = Observer()
                     self.observer.schedule(
                         event_handler,
                         str(self.watch_directory),
-                        recursive=True  # Watch subdirectories for multi-document support
+                        recursive=True,  # Watch subdirectories for multi-document support
                     )
                     self.observer.start()
                 except Exception as e:
                     print(f"⚠️  Error restarting observer: {e}")
                     if self.debug:
                         import traceback
+
                         traceback.print_exc()
 
     def _start_polling(self, poll_interval=4):
@@ -276,7 +302,7 @@ class VBAWatcher:
             if self.smart_poll_timer is not None:
                 try:
                     self.smart_poll_timer.cancel()
-                except Exception:  # noqa: BLE001 - best effort
+                except Exception:
                     pass
             timer = threading.Timer(poll_interval, self._poll_vba_changes)
             timer.daemon = True
@@ -306,8 +332,12 @@ class VBAWatcher:
             from .vba_export import VisioVBAExporter
             from .vba_import import VisioVBAImporter
 
-            use_rubberduck = getattr(self.importer, 'use_rubberduck', False)
-            local_importer = VisioVBAImporter(getattr(self.importer, 'visio_file_path', None), debug=self.debug, use_rubberduck=use_rubberduck)
+            use_rubberduck = getattr(self.importer, "use_rubberduck", False)
+            local_importer = VisioVBAImporter(
+                getattr(self.importer, "visio_file_path", None),
+                debug=self.debug,
+                use_rubberduck=use_rubberduck,
+            )
 
             if not local_importer.connect_to_visio():
                 if self.debug:
@@ -322,12 +352,15 @@ class VBAWatcher:
                 self._pause_observer()
 
                 try:
-                    thread_exporter = VisioVBAExporter(str(local_importer.visio_file_path), debug=self.debug, use_rubberduck=use_rubberduck)
+                    thread_exporter = VisioVBAExporter(
+                        str(local_importer.visio_file_path),
+                        debug=self.debug,
+                        use_rubberduck=use_rubberduck,
+                    )
 
                     if thread_exporter.connect_to_visio(silent=True):
                         all_exported, all_hashes = thread_exporter.export_modules(
-                            self.watch_directory,
-                            last_hashes=self.last_export_hashes
+                            self.watch_directory, last_hashes=self.last_export_hashes
                         )
 
                         if all_exported:
@@ -349,6 +382,7 @@ class VBAWatcher:
                     print(f"⚠️  Error during export: {e}")
                     if self.debug:
                         import traceback
+
                         traceback.print_exc()
                 finally:
                     time.sleep(0.5)
@@ -361,6 +395,7 @@ class VBAWatcher:
             print(f"⚠️  Error during polling export: {e}")
             if self.debug:
                 import traceback
+
                 traceback.print_exc()
             self._exporting.clear()
         finally:
@@ -390,17 +425,19 @@ class VBAWatcher:
         """Start file watcher and optional bidirectional polling"""
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._handle_shutdown)
-        if hasattr(signal, 'SIGTERM'):
+        if hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, self._handle_shutdown)
 
         try:
-            event_handler = VBAFileHandler(self.importer, self, debug=self.debug, sync_delete_modules=self.sync_delete_modules)
+            event_handler = VBAFileHandler(
+                self.importer, self, debug=self.debug, sync_delete_modules=self.sync_delete_modules
+            )
             with self._state_lock:
                 self.observer = Observer()
                 self.observer.schedule(
                     event_handler,
                     str(self.watch_directory),
-                    recursive=True  # Watch subdirectories for multi-document support
+                    recursive=True,  # Watch subdirectories for multi-document support
                 )
                 self.observer.start()
 
@@ -409,7 +446,9 @@ class VBAWatcher:
             print("⏸️  Press Ctrl+C to stop...\n")
 
             if self.bidirectional and self.exporter:
-                print("🔄 Bidirectional sync: Changes in Visio are automatically exported to VS Code.")
+                print(
+                    "🔄 Bidirectional sync: Changes in Visio are automatically exported to VS Code."
+                )
                 if self.debug:
                     print("[DEBUG] Debug mode enabled\n")
                 self._start_polling()
@@ -424,6 +463,7 @@ class VBAWatcher:
             print(f"\n❌ Watcher error: {e}")
             if self.debug:
                 import traceback
+
                 traceback.print_exc()
             self.stop()
 

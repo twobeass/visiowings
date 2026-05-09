@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from visiowings.vba_import import VisioVBAImporter
 
 
@@ -32,10 +30,7 @@ class TestStripVbaHeaderImport:
     def test_preserves_only_vb_name_when_keep_vb_name_true(self):
         importer = VisioVBAImporter("dummy.vsdm")
         code = (
-            'Attribute VB_Name = "Mod1"\n'
-            "Attribute VB_GlobalNameSpace = False\n"
-            "Sub Foo()\n"
-            "End Sub\n"
+            'Attribute VB_Name = "Mod1"\nAttribute VB_GlobalNameSpace = False\nSub Foo()\nEnd Sub\n'
         )
         cleaned = importer._strip_vba_header(code, keep_vb_name=True)
         assert 'Attribute VB_Name = "Mod1"' in cleaned
@@ -95,19 +90,15 @@ class TestEnsureFolderAnnotation:
         path = Path("/ws/drawing1_vsdx/Foo/Bar/Module1.bas")
         content = 'Attribute VB_Name = "Module1"\nOption Explicit\n'
         new = importer._ensure_folder_annotation(content, path, self._doc_info())
-        assert "'@Folder(\"Foo.Bar\")" in new
+        assert '\'@Folder("Foo.Bar")' in new
         assert "Option Explicit" in new
 
     def test_replaces_stale_annotation(self):
         importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=True)
         path = Path("/ws/drawing1_vsdx/New/Module1.bas")
-        content = (
-            'Attribute VB_Name = "Module1"\n'
-            "'@Folder(\"Old.Path\")\n"
-            "Option Explicit\n"
-        )
+        content = 'Attribute VB_Name = "Module1"\n\'@Folder("Old.Path")\nOption Explicit\n'
         new = importer._ensure_folder_annotation(content, path, self._doc_info())
-        assert "'@Folder(\"New\")" in new
+        assert '\'@Folder("New")' in new
         assert "Old.Path" not in new
 
     def test_no_annotation_at_document_root(self):

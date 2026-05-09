@@ -25,7 +25,9 @@ repos:
       - id: end-of-file-fixer
         exclude: \.(bas|cls|frm|frx)$
       - id: check-yaml
-        args: [--allow-multiple-documents]
+        args: [--allow-multiple-documents, --unsafe]
+        # --unsafe is required because mkdocs.yml uses `!!python/name:` tags
+        # for the Material emoji extension; safe-loading rejects them.
       - id: check-toml
       - id: check-json
       - id: check-merge-conflict
@@ -74,7 +76,10 @@ repos:
       - id: codespell
         args:
           - --skip=*.bas,*.cls,*.frm,*.lock,*.json,*.svg,.git
-          - --ignore-words-list=nd,ist,crate,iam
+          # German strings in user-facing prompts/comments + PyInstaller's
+          # `datas` keyword. Add new tokens here when codespell complains
+          # about real words it doesn't recognise.
+          - --ignore-words-list=nd,ist,crate,iam,ans,oder,alle,startet,dokument,datas
         exclude: \.(bas|cls|frm|frx)$
 
   # ------------------------------------------------------------------

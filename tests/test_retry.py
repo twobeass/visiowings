@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from visiowings._retry import retry_with_backoff
-from visiowings.exceptions import COMConnectionError, VBAImportError
+from visiowings.exceptions import COMConnectionError
 
 
 @pytest.fixture(autouse=True)

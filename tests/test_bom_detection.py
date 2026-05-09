@@ -39,7 +39,7 @@ def test_utf16_be_bom_is_stripped(tmp_path):
 
 
 def test_no_bom_utf8_decoded_as_utf8(tmp_path):
-    raw = "Sub Foo()\n' café\nEnd Sub\n".encode("utf-8")
+    raw = "Sub Foo()\n' café\nEnd Sub\n".encode()
     path = _write(tmp_path, "nobom.bas", raw)
     text = VisioVBAImporter._decode_with_bom_detection(path, "cp1252")
     assert "café" in text

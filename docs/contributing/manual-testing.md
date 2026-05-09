@@ -1,6 +1,6 @@
 # Manual Testing Procedures for Visiowings
 
-This manual testing guide provides comprehensive, step-by-step instructions to verify the reliability and correctness of visiowings after robustness improvements. Each section lists prerequisites, actions, and expected outcomes. 
+This manual testing guide provides comprehensive, step-by-step instructions to verify the reliability and correctness of visiowings after robustness improvements. Each section lists prerequisites, actions, and expected outcomes.
 
 ## Table of Contents
 - Prerequisites

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -79,7 +77,9 @@ def test_load_cache_skips_stale_entries(monkeypatch):
     payload = {"latest": "0.9.0", "checked_at": 0}
     _update_check._save_cache(payload)
     # Pretend the cache file is from 1990.
-    import os, time
+    import os
+    import time
+
     mtime = time.time() - (_update_check._CACHE_TTL_SECONDS + 1)
     os.utime(_update_check._CACHE_FILE, (mtime, mtime))
     assert _update_check._load_cache() is None
