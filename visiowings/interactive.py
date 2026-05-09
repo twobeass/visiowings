@@ -1,7 +1,10 @@
 import sys
 from pathlib import Path
 
-from .cli import cmd_edit, cmd_export, cmd_import
+# `cli` and `interactive` are mutually dependent (cli.main() lazy-imports
+# interactive_menu when invoked without args; interactive_menu() then calls
+# back into cli.cmd_*). We resolve the cycle by importing the cli helpers
+# lazily inside `interactive_menu` instead of at module load.
 
 
 class InteractiveArgs:
@@ -50,6 +53,8 @@ def prompt_string(question, default=None):
 
 
 def interactive_menu():
+    from .cli import cmd_edit, cmd_export, cmd_import
+
     print("\n🦋 Welcome to visiowings Interactive Mode")
     print("========================================")
     print("1. Edit Mode (Live Sync VS Code <-> Visio)")

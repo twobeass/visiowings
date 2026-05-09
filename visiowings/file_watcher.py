@@ -303,6 +303,9 @@ class VBAWatcher:
                 try:
                     self.smart_poll_timer.cancel()
                 except Exception:
+                    # Timer.cancel() is best-effort; the timer may have
+                    # already fired or been cancelled — either way we just
+                    # want to schedule a fresh one below.
                     pass
             timer = threading.Timer(poll_interval, self._poll_vba_changes)
             timer.daemon = True

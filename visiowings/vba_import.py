@@ -350,6 +350,10 @@ class VisioVBAImporter:
                     try:
                         vb_project.VBComponents.Remove(possible_renamed_comp)
                     except Exception:
+                        # Best-effort cleanup of the auto-renamed `ModuleName1`
+                        # leftover Visio created during a failed import.
+                        # Failures here are non-fatal: the user gets the same
+                        # error message either way and can retry manually.
                         pass
 
                 print(
@@ -769,6 +773,9 @@ class VisioVBAImporter:
                                 try:
                                     vb_project.VBComponents.Remove(possible_renamed_comp)
                                 except Exception:
+                                    # Same `ModuleName1` cleanup as above —
+                                    # best-effort; failures don't change the
+                                    # user-facing error path below.
                                     pass
 
                             print(
@@ -781,6 +788,9 @@ class VisioVBAImporter:
                             try:
                                 Path(temp_file).unlink()
                             except Exception:
+                                # Temp file was already cleaned up or is on a
+                                # filesystem we can't unlink from — neither
+                                # case affects the import outcome.
                                 pass
 
                         print(f"✓ Imported: {doc_info.folder_name}/{file_path.name}")

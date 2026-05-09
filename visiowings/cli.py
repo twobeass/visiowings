@@ -275,6 +275,8 @@ def _discover_open_documents() -> list[str]:
         try:
             pythoncom.CoInitialize()
         except pythoncom.com_error:
+            # COM is already initialized for this thread (RPC_E_CHANGED_MODE
+            # or similar) — that's fine for a read-only enumeration.
             pass
 
         try:
