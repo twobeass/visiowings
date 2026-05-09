@@ -2,6 +2,12 @@
 
 This manual testing guide provides comprehensive, step-by-step instructions to verify the reliability and correctness of visiowings after robustness improvements. Each section lists prerequisites, actions, and expected outcomes.
 
+> 📋 **For release sign-off, use [UAT Checklist](uat.md) instead.** This page
+> is the *tutorial-style* deep dive on individual features. The UAT page is
+> the structured pass/fail checklist a tester runs before approving a
+> release; it includes installation, supply-chain verification, and the
+> Phase A–H tooling that this page predates.
+
 ## Table of Contents
 - Prerequisites
 - Core Functional Tests

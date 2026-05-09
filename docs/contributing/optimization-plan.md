@@ -313,6 +313,7 @@ calling out — without them, parts of the pipeline degrade:
 | API reference (auto-generated) | `docs/components/cli.md`, `docs/components/document-manager.md` |
 | Contributor onboarding | `CONTRIBUTING.md`, `docs/contributing/development-environment.md` |
 | Releasing + supply-chain verification | `docs/contributing/releasing.md` |
-| Manual testing on real Visio | `docs/contributing/manual-testing.md` |
+| Manual testing on real Visio (tutorial) | `docs/contributing/manual-testing.md` |
+| Release UAT checklist (sign-off) | `docs/contributing/uat.md` |
 | **This page** | `docs/contributing/optimization-plan.md` |
 | Changelog | `CHANGELOG.md`, `docs/changelog.md` |

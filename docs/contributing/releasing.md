@@ -3,6 +3,11 @@
 This project ships releases automatically. As a maintainer you only ever
 need to merge pull requests; the rest is handled by GitHub Actions.
 
+> 📋 Before merging the release PR, run the
+> [UAT checklist](uat.md) end-to-end on a real Windows + Visio machine.
+> Section J (release artefacts) verifies the artefacts produced by this
+> very pipeline.
+
 ## How a release happens
 
 1. **You merge feature PRs to `main`** with [Conventional Commit](https://www.conventionalcommits.org/)
