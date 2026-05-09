@@ -85,12 +85,19 @@ jobs:
       - name: Generate license report
         run: pip-licenses --format=json --with-urls --with-license-file --no-license-path > licenses.json
 
+      - name: Sign SBOM with Sigstore (keyless OIDC)
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: sbom.cdx.json licenses.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: provenance
           path: |
             sbom.cdx.json
+            sbom.cdx.json.sigstore
             licenses.json
+            licenses.json.sigstore
           retention-days: 90
 
       - name: Attach to GitHub Release
@@ -98,7 +105,9 @@ jobs:
         with:
           files: |
             sbom.cdx.json
+            sbom.cdx.json.sigstore
             licenses.json
+            licenses.json.sigstore
           fail_on_unmatched_files: true
 
   # ------------------------------------------------------------------ #

@@ -124,8 +124,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# IDE
-.vscode/
+# IDE — keep shared workspace settings/extensions in source control,
+# ignore everything else (per-user state, history, etc.).
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo

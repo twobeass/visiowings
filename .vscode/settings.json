@@ -1,0 +1,55 @@
+{
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit",
+      "source.fixAll.ruff": "explicit"
+    }
+  },
+
+  "[json][jsonc]": {
+    "editor.tabSize": 2
+  },
+
+  "[yaml][yml]": {
+    "editor.tabSize": 2
+  },
+
+  "[toml]": {
+    "editor.formatOnSave": false
+  },
+
+  "files.eol": "\n",
+  "files.encoding": "utf8",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  "files.associations": {
+    "*.bas": "vb",
+    "*.cls": "vb",
+    "*.frm": "vb"
+  },
+
+  "ruff.enable": true,
+  "ruff.lint.run": "onSave",
+  "ruff.organizeImports": true,
+
+  "mypy-type-checker.preferDaemon": true,
+  "mypy-type-checker.args": ["--config-file=pyproject.toml"],
+
+  "search.exclude": {
+    "**/.venv": true,
+    "**/site": true,
+    "**/htmlcov": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/dist": true,
+    "**/build": true
+  }
+}
