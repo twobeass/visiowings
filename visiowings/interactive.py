@@ -1,10 +1,10 @@
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
-# `cli` and `interactive` are mutually dependent (cli.main() lazy-imports
-# interactive_menu when invoked without args; interactive_menu() then calls
-# back into cli.cmd_*). We resolve the cycle by importing the cli helpers
-# lazily inside `interactive_menu` instead of at module load.
+# This module is deliberately import-free w.r.t. the rest of the package.
+# cli.main() injects the command callables into `interactive_menu` so the
+# two modules never form an import cycle.
 
 
 class InteractiveArgs:
@@ -52,9 +52,11 @@ def prompt_string(question, default=None):
     return val if val else default
 
 
-def interactive_menu():
-    from .cli import cmd_edit, cmd_export, cmd_import
-
+def interactive_menu(
+    cmd_edit: Callable[[InteractiveArgs], object],
+    cmd_export: Callable[[InteractiveArgs], object],
+    cmd_import: Callable[[InteractiveArgs], object],
+) -> None:
     print("\n🦋 Welcome to visiowings Interactive Mode")
     print("========================================")
     print("1. Edit Mode (Live Sync VS Code <-> Visio)")

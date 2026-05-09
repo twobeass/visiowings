@@ -461,11 +461,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
-    # If no arguments are passed, start interactive menu
+    # If no arguments are passed, start interactive menu. We inject the
+    # command callables instead of letting `interactive` import them, so
+    # the two modules don't form an import cycle.
     if not argv:
         from .interactive import interactive_menu
 
-        interactive_menu()
+        interactive_menu(cmd_edit, cmd_export, cmd_import)
         return 0
 
     parser = _build_parser()
