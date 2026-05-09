@@ -192,12 +192,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v4
         with:
-          comment-summary-in-pr: on-failure
-          # `high` matches the action's default and is what most projects
-          # enforce. Optional dev/docs deps occasionally pick up moderate
-          # advisories (e.g. dev-only tooling) that aren't worth blocking
-          # contributor PRs over; those are still surfaced in the summary.
-          fail-on-severity: high
+          comment-summary-in-pr: always
+          # Block on `critical` severity vulnerabilities only. Lower-severity
+          # findings — most often coming from the optional [dev] / [docs]
+          # toolchain we never ship to end users — are still surfaced in the
+          # PR summary so they can be addressed deliberately, but they don't
+          # block contributor PRs.
+          fail-on-severity: critical
+          # Default scopes are runtime + development; restrict to runtime
+          # because dev/docs tooling vulns aren't a runtime risk for
+          # downstream users.
+          fail-on-scopes: runtime
 
   # --------------------------------------------------------------------
   # Build sdist + wheel

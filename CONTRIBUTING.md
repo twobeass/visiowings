@@ -4,6 +4,11 @@ Thanks for your interest in improving visiowings! This document covers the
 development workflow, expectations for pull requests, and how to run the test
 suite.
 
+> 📖 **New here?** The
+> [optimization plan (Phases A–H)](https://twobeass.github.io/visiowings/contributing/optimization-plan/)
+> walks through every piece of CI, tooling, and release automation the project
+> has — what it does, why it exists, and where to find it.
+
 ## Quick start
 
 ```bash

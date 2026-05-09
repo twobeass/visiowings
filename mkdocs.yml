@@ -118,4 +118,5 @@ nav:
     - Development Environment: contributing/development-environment.md
     - Manual Testing: contributing/manual-testing.md
     - Releasing: contributing/releasing.md
+    - Optimization Plan (A–H): contributing/optimization-plan.md
     - Changelog: changelog.md

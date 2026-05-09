@@ -59,6 +59,14 @@ support, and modern tooling. Inspired by [xlwings](https://www.xlwings.org/).
 
     [:octicons-arrow-right-24: Development environment](contributing/development-environment.md)
 
+- :material-clipboard-text-outline:{ .lg .middle } **Optimization plan**
+
+    ---
+
+    What landed in Phases A–H and how the modern pipeline came together.
+
+    [:octicons-arrow-right-24: Optimization plan](contributing/optimization-plan.md)
+
 </div>
 
 ## Project status
