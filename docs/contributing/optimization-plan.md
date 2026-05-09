@@ -289,6 +289,20 @@ A few things were considered and intentionally deferred:
   type; they're attached to GitHub Releases instead. The PyPI install path
   remains `pipx install visiowings`.
 
+## Repo-side prerequisites
+
+Two settings live in the GitHub UI (not in this repo) and are worth
+calling out — without them, parts of the pipeline degrade:
+
+- **Dependency graph** — *Settings → Code security & analysis →
+  Dependency graph: Enabled*. Required by the **Dependency Review** CI
+  job; without it, the action fails fast and the job is treated as
+  advisory (`continue-on-error: true`).
+- **PyPI Trusted Publisher** — see
+  [Releasing → One-time setup](releasing.md#one-time-setup-pypi-trusted-publishing).
+  Without it, the first release upload to PyPI fails; subsequent
+  releases are fine once the pending publisher is promoted.
+
 ## Where the docs live now
 
 | Topic | File |
