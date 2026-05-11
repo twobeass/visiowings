@@ -579,7 +579,41 @@ def _build_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
+def _force_utf8_streams() -> None:
+    """Reconfigure stdout/stderr to UTF-8 so non-ASCII output is safe.
+
+    On a German / French / Japanese Windows default install
+    `sys.stdout.encoding` is the legacy ANSI codepage (cp1252, cp1250,
+    cp932, …) which cannot encode the emoji and box-drawing characters
+    we use in CLI banners and status messages. Without this call the
+    first print of an emoji raises ``UnicodeEncodeError`` and the user
+    sees only the error icon — the actual command never runs.
+
+    ``errors="replace"`` is a deliberate fallback: if for some reason
+    we end up on a stream that genuinely can't take UTF-8 (a captured
+    pipe to a cp1252 file), unencodable chars become ``?`` instead of
+    aborting the command.
+
+    Safe to call repeatedly; idempotent on already-UTF-8 streams.
+    """
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            # `reconfigure` is unavailable on captured streams during
+            # tests (e.g. pytest's `capsys`) and on detached streams.
+            # Either way the user-facing output we care about isn't on
+            # those streams, so silently skip.
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
+
     argv = list(sys.argv[1:] if argv is None else argv)
 
     # If no arguments are passed, start interactive menu. We inject the

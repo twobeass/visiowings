@@ -138,3 +138,60 @@ def test_main_returns_nonzero_on_validation_error(capsys, tmp_path, monkeypatch)
     assert rc == 1
     captured = capsys.readouterr()
     assert "❌" in captured.err
+
+
+# --------------------------------------------------------------------------- #
+# UAT §C1 — cp1252-safe streams
+# --------------------------------------------------------------------------- #
+class TestForceUtf8Streams:
+    """`_force_utf8_streams` must make CLI output safe on legacy ANSI consoles.
+
+    The real-world bug: Windows German/French defaults give stdout a cp1252
+    codec which cannot encode the emoji we use in banners. `cmd_init`
+    crashed before writing `.visiowings.toml`.
+    """
+
+    def test_calls_reconfigure_with_utf8_replace(self, monkeypatch):
+        from visiowings import cli
+
+        calls: list[dict] = []
+
+        class _FakeStream:
+            def reconfigure(self, **kwargs):
+                calls.append(kwargs)
+
+        monkeypatch.setattr(cli.sys, "stdout", _FakeStream())
+        monkeypatch.setattr(cli.sys, "stderr", _FakeStream())
+
+        cli._force_utf8_streams()
+
+        assert len(calls) == 2  # one per stream
+        for c in calls:
+            assert c == {"encoding": "utf-8", "errors": "replace"}
+
+    def test_silently_skips_streams_without_reconfigure(self, monkeypatch):
+        """Captured streams (pytest's capsys) lack `.reconfigure`; that's fine."""
+
+        from visiowings import cli
+
+        class _DumbStream:
+            pass  # no reconfigure attribute
+
+        monkeypatch.setattr(cli.sys, "stdout", _DumbStream())
+        monkeypatch.setattr(cli.sys, "stderr", _DumbStream())
+
+        # Must not raise.
+        cli._force_utf8_streams()
+
+    def test_swallows_reconfigure_errors(self, monkeypatch):
+        from visiowings import cli
+
+        class _AngryStream:
+            def reconfigure(self, **kwargs):
+                raise OSError("detached stream")
+
+        monkeypatch.setattr(cli.sys, "stdout", _AngryStream())
+        monkeypatch.setattr(cli.sys, "stderr", _AngryStream())
+
+        # Must not raise.
+        cli._force_utf8_streams()
