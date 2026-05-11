@@ -26,9 +26,13 @@ from .exceptions import (
     UnsupportedEncodingError,
     VisiowingsError,
 )
-from .file_watcher import VBAWatcher
-from .vba_export import VisioVBAExporter
-from .vba_import import VisioVBAImporter
+
+# COM-touching modules (file_watcher, vba_export, vba_import,
+# document_manager, visio_connection) eager-import pywin32 at module top
+# level. We defer those imports until a subcommand actually needs them
+# so the entry point — including `visiowings --help` and
+# `visiowings init --non-interactive` — also runs on systems without
+# pywin32 (Linux/macOS dev boxes, CI Linux runners).
 
 logger = logging.getLogger("visiowings.cli")
 
@@ -101,6 +105,10 @@ def _validate_readable_dir(path: Path, *, label: str) -> Path:
 # --------------------------------------------------------------------------- #
 def cmd_edit(args):
     """Edit command: Export + Watch + Import with live sync"""
+    from .file_watcher import VBAWatcher
+    from .vba_export import VisioVBAExporter
+    from .vba_import import VisioVBAImporter
+
     visio_file = _validate_visio_file(Path(args.file))
     output_dir = _validate_writable_dir(Path(args.output or "."), label="--output")
     debug = getattr(args, "debug", False)
@@ -174,6 +182,8 @@ def cmd_edit(args):
 
 def cmd_export(args):
     """Export command: Export VBA modules only"""
+    from .vba_export import VisioVBAExporter
+
     visio_file = _validate_visio_file(Path(args.file))
     output_dir = _validate_writable_dir(Path(args.output or "."), label="--output")
     debug = getattr(args, "debug", False)
@@ -291,6 +301,8 @@ def _discover_open_documents() -> list[str]:
 
 def cmd_import(args):
     """Import command: Import VBA modules only"""
+    from .vba_import import VisioVBAImporter
+
     visio_file = _validate_visio_file(Path(args.file))
     input_dir = _validate_readable_dir(Path(args.input or "."), label="--input")
     debug = getattr(args, "debug", False)
