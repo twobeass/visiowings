@@ -45,10 +45,12 @@ def _apply_config_defaults(args: argparse.Namespace, cfg: VisiowingsConfig) -> N
             value = getattr(cfg, field_name, None)
             if value is not None:
                 setattr(args, field_name, value)
+                logger.debug("config-layer: %s <- .visiowings.toml (%r)", field_name, value)
     for field_name in ("bidirectional", "rubberduck", "sync_delete_modules", "force"):
         # Argparse store_true defaults to False, so we only upgrade False -> True.
         if not getattr(args, field_name, False) and getattr(cfg, field_name, False):
             setattr(args, field_name, True)
+            logger.debug("config-layer: %s <- .visiowings.toml (True)", field_name)
 
 
 # --------------------------------------------------------------------------- #
@@ -115,6 +117,15 @@ def cmd_edit(args):
     sync_delete_modules = getattr(args, "sync_delete_modules", False)
     codepage = _validate_codepage(getattr(args, "codepage", None))
     use_rubberduck = getattr(args, "rubberduck", False)
+
+    logger.debug("cmd_edit starting: file=%s output=%s", visio_file, output_dir)
+    logger.debug(
+        "bidirectional=%s sync_delete_modules=%s codepage=%s rubberduck=%s",
+        getattr(args, "bidirectional", False),
+        sync_delete_modules,
+        codepage or "<auto>",
+        use_rubberduck,
+    )
 
     print(f"📂 Visio file: {visio_file}")
     print(f"📁 Export directory: {output_dir}")
@@ -189,6 +200,9 @@ def cmd_export(args):
     debug = getattr(args, "debug", False)
     codepage = _validate_codepage(getattr(args, "codepage", None))
     use_rubberduck = getattr(args, "rubberduck", False)
+
+    logger.debug("cmd_export starting: file=%s output=%s", visio_file, output_dir)
+    logger.debug("codepage=%s rubberduck=%s", codepage or "<auto>", use_rubberduck)
 
     if use_rubberduck:
         print("🦆 Rubberduck integration enabled (folder annotations)")
@@ -309,6 +323,14 @@ def cmd_import(args):
     codepage = _validate_codepage(getattr(args, "codepage", None))
     use_rubberduck = getattr(args, "rubberduck", False)
 
+    logger.debug("cmd_import starting: file=%s input=%s", visio_file, input_dir)
+    logger.debug(
+        "force=%s codepage=%s rubberduck=%s",
+        getattr(args, "force", False),
+        codepage or "<auto>",
+        use_rubberduck,
+    )
+
     if use_rubberduck:
         print("🦆 Rubberduck integration enabled (folder annotations)")
 
@@ -382,7 +404,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Bidirectional sync: Automatically export changes from Visio to VS Code",
     )
     edit_parser.add_argument(
-        "--debug", action="store_true", help="Debug mode: Verbose logging output"
+        "--debug",
+        action="store_true",
+        help="Enable structured [DEBUG] logging on stderr and show tracebacks on failure",
     )
     edit_parser.add_argument(
         "--sync-delete-modules",
@@ -417,7 +441,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output", "-o", help="Export directory (default: current directory)"
     )
     export_parser.add_argument(
-        "--debug", action="store_true", help="Debug mode: Verbose logging output"
+        "--debug",
+        action="store_true",
+        help="Enable structured [DEBUG] logging on stderr and show tracebacks on failure",
     )
     export_parser.add_argument(
         "--codepage",
@@ -450,7 +476,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true", help="Overwrite document modules (ThisDocument.cls)"
     )
     import_parser.add_argument(
-        "--debug", action="store_true", help="Debug mode: Verbose logging output"
+        "--debug",
+        action="store_true",
+        help="Enable structured [DEBUG] logging on stderr and show tracebacks on failure",
     )
     import_parser.add_argument(
         "--codepage",
