@@ -231,22 +231,63 @@ def cmd_export(args):
                     print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
 
 
+_DEFAULT_INIT_FILE = "your-document.vsdm"
+_DEFAULT_INIT_OUTPUT = "./vba"
+_DEFAULT_INIT_CODEPAGE = "cp1252"
+
+
 def cmd_init(args):
     """Generate a ``.visiowings.toml`` config in the current directory.
 
-    Walks the user through a small wizard:
+    Two modes:
 
-    1. List currently open Visio documents (or accept manual path entry).
-    2. Pick the main document.
-    3. Pick output directory + sync flags.
-    4. Write the config.
+    - **Interactive (default):** small wizard. Lists currently open Visio
+      documents (via COM) and prompts for output dir, codepage, sync flags.
+    - **Non-interactive** (``--non-interactive`` / ``-y``): skip all prompts
+      and write a sensible default config. Required values can be passed in
+      via ``--file``, ``--output``, ``--codepage`` flags. This is the path
+      the UAT runner uses.
+
+    Idempotency: if ``.visiowings.toml`` already exists the command refuses
+    to overwrite. Pass ``--force`` to overwrite, or in interactive mode
+    answer ``y`` to the confirm prompt.
     """
 
     config_path = Path.cwd() / CONFIG_FILENAME
-    if config_path.exists() and not getattr(args, "force", False):
-        raise VisiowingsError(
-            f"{config_path} already exists. Use `visiowings init --force` to overwrite."
+    non_interactive = getattr(args, "non_interactive", False)
+    force = getattr(args, "force", False)
+
+    logger.debug(
+        "cmd_init starting: cwd=%s non_interactive=%s force=%s exists=%s",
+        Path.cwd(),
+        non_interactive,
+        force,
+        config_path.exists(),
+    )
+
+    if config_path.exists() and not force:
+        if non_interactive:
+            raise VisiowingsError(
+                f"{config_path} already exists. "
+                f"Pass --force to overwrite (non-interactive mode does not prompt)."
+            )
+        answer = input(f"{config_path.name} already exists. Overwrite? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("Aborted; nothing written.")
+            return
+        force = True
+
+    if non_interactive:
+        cfg = VisiowingsConfig(
+            file=getattr(args, "file", None) or _DEFAULT_INIT_FILE,
+            output=getattr(args, "output", None) or _DEFAULT_INIT_OUTPUT,
+            codepage=getattr(args, "codepage", None) or _DEFAULT_INIT_CODEPAGE,
+            bidirectional=False,
+            rubberduck=False,
         )
+        target = write_config(cfg)
+        print(f"✓ Wrote {target} (non-interactive defaults — edit before use)")
+        return
 
     print(f"\n🦉 visiowings init — writing {config_path.name}\n")
 
@@ -272,10 +313,13 @@ def cmd_init(args):
         print("(No documents detected via COM. You can still enter a path manually.)\n")
         main_file = input("Path to Visio file: ").strip()
 
-    output_dir = input("Output directory for VBA files [vba]: ").strip() or "vba"
+    output_dir = (
+        input(f"Output directory for VBA files [{_DEFAULT_INIT_OUTPUT}]: ").strip()
+        or _DEFAULT_INIT_OUTPUT
+    )
     bidir = input("Enable bidirectional sync (y/N)? ").strip().lower() == "y"
     rubberduck = input("Use Rubberduck @Folder annotations (y/N)? ").strip().lower() == "y"
-    codepage = input("Codepage (blank = auto-detect): ").strip() or None
+    codepage = input(f"Codepage [{_DEFAULT_INIT_CODEPAGE}, blank = auto-detect]: ").strip() or None
 
     cfg = VisiowingsConfig(
         file=main_file,
@@ -383,6 +427,31 @@ def _build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Overwrite an existing .visiowings.toml",
+    )
+    init_parser.add_argument(
+        "--non-interactive",
+        "-y",
+        action="store_true",
+        help=(
+            "Skip prompts and write a default .visiowings.toml. Useful for CI and the UAT runner."
+        ),
+    )
+    init_parser.add_argument(
+        "--file",
+        help="Visio file path to record in the config (non-interactive mode)",
+    )
+    init_parser.add_argument(
+        "--output",
+        help="Output directory to record in the config (default: ./vba)",
+    )
+    init_parser.add_argument(
+        "--codepage",
+        help="Codepage to record in the config (default: cp1252)",
+    )
+    init_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable structured [DEBUG] logging on stderr and show tracebacks on failure",
     )
 
     # Edit command
