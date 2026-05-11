@@ -107,16 +107,20 @@ def _validate_readable_dir(path: Path, *, label: str) -> Path:
 # --------------------------------------------------------------------------- #
 def cmd_edit(args):
     """Edit command: Export + Watch + Import with live sync"""
-    from .file_watcher import VBAWatcher
-    from .vba_export import VisioVBAExporter
-    from .vba_import import VisioVBAImporter
-
+    # Validate input *before* pulling in the COM-touching modules so that
+    # a "file not found" or "bad codepage" error doesn't require pywin32
+    # to be importable on the host (matters on Linux/macOS test runners
+    # and is also a small UX win on Windows).
     visio_file = _validate_visio_file(Path(args.file))
     output_dir = _validate_writable_dir(Path(args.output or "."), label="--output")
     debug = getattr(args, "debug", False)
     sync_delete_modules = getattr(args, "sync_delete_modules", False)
     codepage = _validate_codepage(getattr(args, "codepage", None))
     use_rubberduck = getattr(args, "rubberduck", False)
+
+    from .file_watcher import VBAWatcher
+    from .vba_export import VisioVBAExporter
+    from .vba_import import VisioVBAImporter
 
     logger.debug("cmd_edit starting: file=%s output=%s", visio_file, output_dir)
     logger.debug(
@@ -193,13 +197,14 @@ def cmd_edit(args):
 
 def cmd_export(args):
     """Export command: Export VBA modules only"""
-    from .vba_export import VisioVBAExporter
-
+    # Validate before pulling in COM (see cmd_edit).
     visio_file = _validate_visio_file(Path(args.file))
     output_dir = _validate_writable_dir(Path(args.output or "."), label="--output")
     debug = getattr(args, "debug", False)
     codepage = _validate_codepage(getattr(args, "codepage", None))
     use_rubberduck = getattr(args, "rubberduck", False)
+
+    from .vba_export import VisioVBAExporter
 
     logger.debug("cmd_export starting: file=%s output=%s", visio_file, output_dir)
     logger.debug("codepage=%s rubberduck=%s", codepage or "<auto>", use_rubberduck)
@@ -359,13 +364,14 @@ def _discover_open_documents() -> list[str]:
 
 def cmd_import(args):
     """Import command: Import VBA modules only"""
-    from .vba_import import VisioVBAImporter
-
+    # Validate before pulling in COM (see cmd_edit).
     visio_file = _validate_visio_file(Path(args.file))
     input_dir = _validate_readable_dir(Path(args.input or "."), label="--input")
     debug = getattr(args, "debug", False)
     codepage = _validate_codepage(getattr(args, "codepage", None))
     use_rubberduck = getattr(args, "rubberduck", False)
+
+    from .vba_import import VisioVBAImporter
 
     logger.debug("cmd_import starting: file=%s input=%s", visio_file, input_dir)
     logger.debug(
@@ -628,6 +634,18 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         sys.stderr.write("\n⏹  Interrupted by user.\n")
         return 130
+    except Exception as exc:  # last-resort UX safety net (see comment below)
+        # Anything that wasn't expressed as a `VisiowingsError` reaches here.
+        # We still want a single user-facing line + non-zero exit. The full
+        # traceback is only emitted under --debug, so a misconfigured
+        # environment (e.g. missing pywin32 on a non-Windows host) doesn't
+        # produce a frightening wall of Python frames for the user.
+        sys.stderr.write(f"❌ {type(exc).__name__}: {exc}\n")
+        if getattr(args, "debug", False):
+            logger.exception("Traceback (--debug):")
+        else:
+            sys.stderr.write("   Re-run with --debug to see the full traceback.\n")
+        return 1
 
     return 0
 
