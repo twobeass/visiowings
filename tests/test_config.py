@@ -87,3 +87,84 @@ def test_unknown_keys_land_in_extras(tmp_path):
     cfg = load_config(target)
     assert cfg.file == "x.vsdm"
     assert cfg.extras == {"future_flag": True}
+
+
+# ---------------------------------------------------------------------------
+# UAT §C2 — config layering: flag > .visiowings.toml > built-in default
+# ---------------------------------------------------------------------------
+def _make_args(**values):
+    """Build an argparse.Namespace stand-in with the fields _apply_config_defaults reads."""
+
+    import argparse
+
+    defaults = {
+        "file": None,
+        "output": None,
+        "input": None,
+        "codepage": None,
+        "bidirectional": False,
+        "rubberduck": False,
+        "sync_delete_modules": False,
+        "force": False,
+    }
+    defaults.update(values)
+    return argparse.Namespace(**defaults)
+
+
+def test_layering_toml_fills_in_when_flag_absent():
+    from visiowings.cli import _apply_config_defaults
+
+    args = _make_args()
+    cfg = VisiowingsConfig(file="from-toml.vsdm", output="vba", codepage="cp1251")
+
+    _apply_config_defaults(args, cfg)
+
+    assert args.file == "from-toml.vsdm"
+    assert args.output == "vba"
+    assert args.codepage == "cp1251"
+
+
+def test_layering_flag_overrides_toml():
+    from visiowings.cli import _apply_config_defaults
+
+    args = _make_args(file="from-flag.vsdm", codepage="cp1252")
+    cfg = VisiowingsConfig(file="from-toml.vsdm", output="vba", codepage="cp1251")
+
+    _apply_config_defaults(args, cfg)
+
+    # flag values must win
+    assert args.file == "from-flag.vsdm"
+    assert args.codepage == "cp1252"
+    # the field not set by flag still picks up the TOML value
+    assert args.output == "vba"
+
+
+def test_layering_default_remains_when_neither_set():
+    from visiowings.cli import _apply_config_defaults
+
+    args = _make_args()
+    cfg = VisiowingsConfig()  # no values
+
+    _apply_config_defaults(args, cfg)
+
+    assert args.file is None
+    assert args.output is None
+    assert args.codepage is None
+
+
+def test_layering_bool_flag_is_one_way_escalation():
+    """`bidirectional = true` in TOML enables it; flag absent stays False otherwise."""
+
+    from visiowings.cli import _apply_config_defaults
+
+    # TOML True, flag False -> escalates to True
+    args = _make_args(bidirectional=False)
+    cfg = VisiowingsConfig(bidirectional=True)
+    _apply_config_defaults(args, cfg)
+    assert args.bidirectional is True
+
+    # TOML False, flag False -> stays False
+    args = _make_args(bidirectional=False)
+    cfg = VisiowingsConfig(bidirectional=False)
+    _apply_config_defaults(args, cfg)
+    assert args.bidirectional is False

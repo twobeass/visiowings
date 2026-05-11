@@ -402,7 +402,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="visiowings",
         description="visiowings - VBA Editor for Visio with VS Code Integration (Multi-Document Support)",
-        epilog="Example: visiowings edit --file document.vsdx --force --bidirectional --debug",
+        epilog=(
+            "Example: visiowings edit --file document.vsdx --force --bidirectional --debug\n\n"
+            "Config layering: command-line flags override values in "
+            "`.visiowings.toml`, which override built-in defaults. Run "
+            "`visiowings init` to scaffold a config in the current directory."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version",
