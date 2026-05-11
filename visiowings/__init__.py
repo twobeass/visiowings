@@ -39,6 +39,11 @@ def __getattr__(name: str) -> Any:
 
 
 if TYPE_CHECKING:  # pragma: no cover
+    # `TC004` flags these as "used outside TYPE_CHECKING" because of the
+    # `__all__` / `_LAZY_EXPORTS` references — but at runtime those go
+    # through `__getattr__` and never need the static import. Keeping the
+    # imports in the type-checking block is what lets mypy + IDEs resolve
+    # the symbols without pulling pywin32 in at import time.
     from .file_watcher import VBAWatcher
     from .vba_export import VisioVBAExporter
     from .vba_import import VisioVBAImporter

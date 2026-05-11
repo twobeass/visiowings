@@ -280,7 +280,7 @@ def cmd_init(args):
         if answer not in ("y", "yes"):
             print("Aborted; nothing written.")
             return
-        force = True
+        # User confirmed; fall through to the write path below.
 
     if non_interactive:
         cfg = VisiowingsConfig(
