@@ -365,6 +365,13 @@ class VisioVBAImporter:
                 )
                 return False
 
+            # Strip the Option Explicit Visio auto-prepends when "Require
+            # Variable Declaration" is on in the VBE; without this dedupe
+            # every round-trip would accumulate one extra line.
+            removed = self._dedupe_option_explicit(imported_comp)
+            if removed and self.debug:
+                print(f"[DEBUG] Removed {removed} duplicate Option Explicit line(s)")
+
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
         except Exception as e:
@@ -598,6 +605,64 @@ class VisioVBAImporter:
 
         return ans in ("y", "yes")
 
+    @staticmethod
+    def _dedupe_option_explicit(component) -> int:
+        """Remove duplicate ``Option Explicit`` lines from a VBA module.
+
+        Visio (like Excel/Word VBA) auto-prepends ``Option Explicit`` to
+        every newly imported module if the VBE option "Require Variable
+        Declaration" is enabled. Our exported `.bas` / `.cls` already
+        contains ``Option Explicit``, so the round-trip
+        ``export -> import`` accumulates one extra line per pass.
+
+        After the VBComponents.Import call we look at the module body's
+        first non-blank lines and delete every ``Option Explicit``
+        beyond the first. Returns the number of duplicates removed (0
+        on a clean module).
+
+        The walk is bounded to the top of the file: real ``Option
+        Explicit`` only ever belongs in the module-level declarations
+        block, never inside a procedure.
+        """
+
+        try:
+            cm = component.CodeModule
+            total = cm.CountOfLines
+            if total <= 1:
+                return 0
+
+            # Inspect only the module-level declaration block. The
+            # declaration block ends at the first procedure (Sub / Function
+            # / Property) or after a generous bound, whichever is first.
+            scan_limit = min(total, 50)
+
+            keep_first = True
+            duplicates: list[int] = []
+            for lineno in range(1, scan_limit + 1):
+                line = cm.Lines(lineno, 1).strip()
+                stripped = line.lower()
+                if stripped == "option explicit":
+                    if keep_first:
+                        keep_first = False
+                    else:
+                        duplicates.append(lineno)
+                elif stripped.startswith(
+                    ("sub ", "function ", "property ", "private sub", "public sub")
+                ):
+                    # Reached a procedure; declarations end here.
+                    break
+
+            # Delete bottom-up so earlier indices stay valid.
+            for lineno in reversed(duplicates):
+                cm.DeleteLines(lineno, 1)
+
+            return len(duplicates)
+        except Exception:
+            # Best-effort cleanup; never break the import for a cosmetic
+            # dedupe. The user can still see and remove the duplicate
+            # manually if our heuristics miss.
+            return 0
+
     def _import_document_module_content(self, component, file_path):
         """Helper to overwrite document module content"""
         try:
@@ -797,6 +862,16 @@ class VisioVBAImporter:
                                 f"✗ Error: Visio is still processing. Import aborted for {doc_info.folder_name}/{file_path.name}"
                             )
                             continue
+
+                        # Strip the Option Explicit Visio auto-prepends
+                        # when "Require Variable Declaration" is on in the
+                        # VBE; otherwise every round-trip accumulates one
+                        # extra line.
+                        removed = self._dedupe_option_explicit(imported_comp)
+                        if removed and self.debug:
+                            print(
+                                f"[DEBUG] {file_path.name}: removed {removed} duplicate Option Explicit line(s)"
+                            )
 
                         # Clean up
                         if temp_file and temp_file != str(file_path):

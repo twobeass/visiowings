@@ -172,6 +172,15 @@ class TestForceFlagPlumbing:
         importer = VisioVBAImporter("dummy.vsdm", non_interactive=True)
         assert importer.non_interactive is True
 
+    def test_non_interactive_propagates_to_subparser(self):
+        """`--non-interactive` flag on `import` reaches argparse."""
+        from visiowings.cli import _build_parser
+
+        parser = _build_parser()
+        ns = parser.parse_args(["import", "--file", "x.vsdm", "--non-interactive"])
+        assert ns.non_interactive is True
+        assert ns.force is False
+
     def test_cli_force_implies_always_yes_in_import(self, monkeypatch, tmp_path):
         """`cmd_import` must pass `always_yes=force` to the importer."""
 
@@ -209,3 +218,103 @@ class TestForceFlagPlumbing:
         assert captured.get("force_document") is True
         assert captured.get("always_yes") is True
         assert captured.get("non_interactive") is False
+
+
+# --------------------------------------------------------------------------- #
+# UAT iter3 #1 — Option Explicit dedupe after import
+# --------------------------------------------------------------------------- #
+class TestDedupeOptionExplicit:
+    """Iter3 #1: Visio auto-prepends Option Explicit when the VBE option
+    "Require Variable Declaration" is on. Our exported `.bas` already
+    has it; without the post-import dedupe every round-trip would
+    accumulate one duplicate.
+    """
+
+    def _make_component(self, lines: list[str]):
+        """Build a MagicMock that mimics a VBA component with a CodeModule."""
+
+        comp = MagicMock(name="comp")
+        cm = comp.CodeModule
+        # `Lines(start, count)` in the real API returns a newline-joined
+        # block; for the dedupe we only ask for one line at a time.
+        state = {"lines": list(lines)}
+
+        def _lines(start, count):
+            # 1-based indexing, count == 1 in our scanner.
+            return state["lines"][start - 1]
+
+        def _delete(start, count):
+            del state["lines"][start - 1 : start - 1 + count]
+            cm.CountOfLines = len(state["lines"])
+
+        cm.Lines.side_effect = _lines
+        cm.DeleteLines.side_effect = _delete
+        cm.CountOfLines = len(state["lines"])
+        # Expose the mutating state for assertions
+        comp._state = state  # type: ignore[attr-defined]
+        return comp
+
+    def test_keeps_a_lone_option_explicit(self):
+        comp = self._make_component(["Option Explicit", "", "Sub Foo()", "End Sub"])
+        removed = VisioVBAImporter._dedupe_option_explicit(comp)
+        assert removed == 0
+        assert comp._state["lines"][0] == "Option Explicit"
+
+    def test_removes_one_duplicate(self):
+        comp = self._make_component(
+            ["Option Explicit", "Option Explicit", "", "Sub Foo()", "End Sub"]
+        )
+        removed = VisioVBAImporter._dedupe_option_explicit(comp)
+        assert removed == 1
+        assert comp._state["lines"].count("Option Explicit") == 1
+
+    def test_removes_multiple_duplicates(self):
+        comp = self._make_component(
+            [
+                "Option Explicit",
+                "",
+                "Option Explicit",
+                "",
+                "Option Explicit",
+                "Sub Foo()",
+                "End Sub",
+            ]
+        )
+        removed = VisioVBAImporter._dedupe_option_explicit(comp)
+        assert removed == 2
+        assert comp._state["lines"].count("Option Explicit") == 1
+
+    def test_case_insensitive(self):
+        comp = self._make_component(
+            ["Option Explicit", "OPTION EXPLICIT", "  option explicit  ", "Sub Foo()"]
+        )
+        removed = VisioVBAImporter._dedupe_option_explicit(comp)
+        assert removed == 2
+        # First-occurrence semantics: keep the literal first line, drop the rest.
+        assert comp._state["lines"][0] == "Option Explicit"
+
+    def test_stops_at_procedure_boundary(self):
+        """Anything inside Sub/Function is not considered a declaration."""
+
+        comp = self._make_component(
+            [
+                "Option Explicit",
+                "Sub Foo()",
+                "    Option Explicit",  # inside a procedure — not real
+                "End Sub",
+            ]
+        )
+        removed = VisioVBAImporter._dedupe_option_explicit(comp)
+        assert removed == 0  # the second occurrence was past the boundary
+
+    def test_handles_empty_module_without_error(self):
+        comp = self._make_component([])
+        removed = VisioVBAImporter._dedupe_option_explicit(comp)
+        assert removed == 0
+
+    def test_swallows_exceptions_in_codemodule_access(self):
+        comp = MagicMock(name="broken")
+        comp.CodeModule.CountOfLines = 5
+        comp.CodeModule.Lines.side_effect = Exception("broken COM")
+        # Must not raise; returns 0 on failure.
+        assert VisioVBAImporter._dedupe_option_explicit(comp) == 0
