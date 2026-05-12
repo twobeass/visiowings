@@ -82,12 +82,34 @@ def _validate_codepage(name: str | None) -> str | None:
 
 
 def _validate_writable_dir(path: Path, *, label: str) -> Path:
-    """Resolve a directory and ensure it exists and is writable."""
+    """Resolve a directory and ensure it exists and is writable.
+
+    On Windows ``os.access(path, W_OK)`` ignores ACL deny rules — a
+    directory with `icacls /deny <user>:(W)` still tests as writable.
+    We therefore probe with an actual file write (and clean it up
+    immediately) so a non-writable `--output` is caught at validation
+    time, before any per-document export starts and leaves partial
+    artefacts behind (UAT §G4).
+    """
 
     resolved = path.resolve()
-    resolved.mkdir(parents=True, exist_ok=True)
-    if not os.access(resolved, os.W_OK):
-        raise VisiowingsError(f"{label} is not writable: {resolved}")
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        raise VisiowingsError(f"{label} is not writable: {resolved} ({exc})") from exc
+
+    probe = resolved / ".visiowings-write-probe"
+    try:
+        probe.touch()
+    except OSError as exc:
+        raise VisiowingsError(f"{label} is not writable: {resolved} ({exc})") from exc
+    finally:
+        try:
+            probe.unlink()
+        except OSError:
+            # Probe might already be gone (race with another process) — fine.
+            pass
+
     return resolved
 
 
@@ -220,21 +242,36 @@ def cmd_export(args):
         use_rubberduck=use_rubberduck,
         force_export_frx=getattr(args, "export_frx", False),
     )
-    if exporter.connect_to_visio():
-        all_exported, all_hashes = exporter.export_modules(output_dir)
+    if not exporter.connect_to_visio():
+        # `connect_to_visio` prints its own diagnostic; surface a typed
+        # error so `main()`'s catch-all reports exit 1.
+        raise VisiowingsError("Could not connect to Visio for export.")
 
-        if all_exported:
-            total_files = sum(len(files) for files in all_exported.values())
-            total_docs = len(all_exported)
+    all_exported, all_hashes = exporter.export_modules(output_dir)
 
-            if total_docs > 1:
-                print(f"\n✓ {total_files} modules exported from {total_docs} documents")
-            else:
-                print(f"\n✓ {total_files} modules exported")
+    if all_exported:
+        total_files = sum(len(files) for files in all_exported.values())
+        total_docs = len(all_exported)
 
-            if debug:
-                for doc_folder, doc_hash in all_hashes.items():
-                    print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
+        if total_docs > 1:
+            print(f"\n✓ {total_files} modules exported from {total_docs} documents")
+        else:
+            print(f"\n✓ {total_files} modules exported")
+
+        if debug:
+            for doc_folder, doc_hash in all_hashes.items():
+                print(f"[DEBUG] {doc_folder}: Hash {doc_hash[:8]}...")
+
+    # UAT §G4: per-document failures (e.g. PermissionError on a
+    # read-only `--output`) must produce a non-zero exit code, even if
+    # some documents in the batch exported successfully. The exporter
+    # already printed the user-facing "❌ Error exporting ..." line per
+    # failure; here we translate that into a typed error so `main()`
+    # exits 1 instead of swallowing the failure silently.
+    if exporter.last_export_failures:
+        n = len(exporter.last_export_failures)
+        details = "; ".join(f"{f['document']}: {f['error']}" for f in exporter.last_export_failures)
+        raise VisiowingsError(f"Export failed for {n} document(s): {details}")
 
 
 _DEFAULT_INIT_FILE = "your-document.vsdm"

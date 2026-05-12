@@ -33,6 +33,11 @@ class VisioVBAExporter:
         self.codepage = DEFAULT_CODEPAGE
         self.use_rubberduck = use_rubberduck
         self.force_export_frx = force_export_frx
+        # Populated by ``export_modules``: documents whose per-doc export
+        # raised (e.g. PermissionError on a read-only output directory).
+        # Inspected by the CLI to translate per-doc failures into a
+        # non-zero exit code — required by UAT §G4.
+        self.last_export_failures: list[dict] = []
 
     def connect_to_visio(self, silent=False):
         try:
@@ -453,6 +458,12 @@ class VisioVBAExporter:
             return exported_files, current_hash
         except Exception as e:
             print(f"❌ Error exporting {doc_info.name}: {type(e).__name__}: {e}")
+            self.last_export_failures.append(
+                {
+                    "document": doc_info.name,
+                    "error": f"{type(e).__name__}: {e}",
+                }
+            )
             if self.debug:
                 import traceback
 
@@ -534,6 +545,10 @@ class VisioVBAExporter:
                 print(f"[i] Kept {len(files_to_delete)} local file(s)")
 
     def export_modules(self, output_dir, last_hashes=None):
+        # Reset the per-doc failure log at the start of every run so a
+        # second `export_modules` call doesn't see stale entries.
+        self.last_export_failures = []
+
         if not self.doc_manager:
             print("❌ No document manager initialized")
             return {}, {}
@@ -569,6 +584,12 @@ class VisioVBAExporter:
             return all_exported, all_hashes
         except Exception as e:
             print(f"❌ Error during export: {type(e).__name__}: {e}")
+            self.last_export_failures.append(
+                {
+                    "document": "<outer batch>",
+                    "error": f"{type(e).__name__}: {e}",
+                }
+            )
             if self.debug:
                 import traceback
 

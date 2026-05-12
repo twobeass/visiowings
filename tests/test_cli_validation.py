@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from visiowings.cli import (
@@ -83,6 +85,30 @@ class TestDirectoryValidation:
         target.mkdir()
         result = _validate_writable_dir(target, label="--output")
         assert result == target.resolve()
+
+    def test_writable_dir_rejects_when_touch_raises(self, tmp_path, monkeypatch):
+        """Iter4 §G4: Windows ACL deny rules are invisible to `os.access`
+        but DO raise PermissionError on a real write. The probe must catch
+        that and raise `VisiowingsError`, so a per-batch export never
+        starts against an unwritable output dir."""
+
+        target = tmp_path / "ro"
+        target.mkdir()
+
+        original_touch = Path.touch
+
+        def _refusing_touch(self_path, *a, **kw):
+            if self_path.name == ".visiowings-write-probe":
+                raise PermissionError("simulated ACL deny")
+            return original_touch(self_path, *a, **kw)
+
+        monkeypatch.setattr(Path, "touch", _refusing_touch)
+
+        with pytest.raises(VisiowingsError) as info:
+            _validate_writable_dir(target, label="--output")
+        assert "not writable" in str(info.value)
+        # No leftover probe file.
+        assert not (target / ".visiowings-write-probe").exists()
 
     def test_readable_dir_rejects_missing(self, tmp_path):
         with pytest.raises(VisiowingsError):
@@ -195,3 +221,77 @@ class TestForceUtf8Streams:
 
         # Must not raise.
         cli._force_utf8_streams()
+
+
+# --------------------------------------------------------------------------- #
+# UAT §G4 — export must exit non-zero when per-document writes fail
+# --------------------------------------------------------------------------- #
+class TestExportExitCodeOnFailure:
+    """`cmd_export` must translate the exporter's per-doc failure log
+    into a `VisiowingsError`, so `main()` returns exit 1 even when only
+    *some* of the documents in the batch failed (or all of them did
+    without raising at the batch level)."""
+
+    def test_main_returns_one_when_exporter_records_failure(self, monkeypatch, tmp_path, capsys):
+        """End-to-end: a stub exporter that records a failure → main → 1."""
+
+        from visiowings import cli
+
+        vsdm = tmp_path / "doc.vsdm"
+        vsdm.write_bytes(b"")  # extension is what we validate
+
+        class _StubExporter:
+            def __init__(self, *_a, **_kw):
+                # Mirror the public attribute the CLI reads.
+                self.last_export_failures = []
+
+            def connect_to_visio(self):
+                return True
+
+            def export_modules(self, _output_dir, last_hashes=None):
+                self.last_export_failures = [
+                    {"document": "Drawing1", "error": "PermissionError: [WinError 5]"}
+                ]
+                return {}, {}
+
+        # Patch the lazy import target.
+        import sys as _sys
+
+        monkeypatch.setattr(
+            _sys.modules["visiowings.vba_export"], "VisioVBAExporter", _StubExporter
+        )
+
+        rc = cli.main(["export", "--file", str(vsdm), "--output", str(tmp_path)])
+        assert rc == 1
+        out = capsys.readouterr()
+        assert "❌" in out.err
+        assert "Export failed" in out.err
+        assert "Drawing1" in out.err
+        assert "PermissionError" in out.err
+
+    def test_main_returns_zero_when_no_failures_recorded(self, monkeypatch, tmp_path, capsys):
+        """Sanity guard: when the stub does NOT record a failure, exit 0."""
+
+        from visiowings import cli
+
+        vsdm = tmp_path / "doc.vsdm"
+        vsdm.write_bytes(b"")
+
+        class _StubExporter:
+            def __init__(self, *_a, **_kw):
+                self.last_export_failures = []
+
+            def connect_to_visio(self):
+                return True
+
+            def export_modules(self, _output_dir, last_hashes=None):
+                return {"Drawing1": ["Module1.bas"]}, {"Drawing1": "hash"}
+
+        import sys as _sys
+
+        monkeypatch.setattr(
+            _sys.modules["visiowings.vba_export"], "VisioVBAExporter", _StubExporter
+        )
+
+        rc = cli.main(["export", "--file", str(vsdm), "--output", str(tmp_path)])
+        assert rc == 0
