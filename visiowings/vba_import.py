@@ -18,6 +18,7 @@ class VisioVBAImporter:
         debug=False,
         silent_reconnect=False,
         always_yes=False,
+        non_interactive=False,
         user_codepage=None,
         use_rubberduck=False,
     ):
@@ -30,6 +31,9 @@ class VisioVBAImporter:
         self.doc_manager = None
         self.document_map = {}
         self.always_yes = always_yes
+        # When True we never call ``input()``: any unresolved conflict
+        # defaults to "skip" so a CI run never hangs or raises EOFError.
+        self.non_interactive = non_interactive
         self.user_codepage = user_codepage
         self.codepage = DEFAULT_CODEPAGE
         self.use_rubberduck = use_rubberduck
@@ -689,13 +693,24 @@ class VisioVBAImporter:
                 for fname in files_with_changes:
                     print(f"   - {doc_info.folder_name}/{fname}")
 
-                print("\nOptions:")
-                print("  o - Overwrite all in Visio with local content")
-                print("  s - Skip changed files (keep Visio content)")
-                print("  i - Interactive (choose per file)")
-                print("  c - Cancel import for this document")
-
-                response = input("\nChoose action (o/s/i/C): ").strip().lower()
+                # Resolve the action without prompting when the caller has
+                # made the decision via flags. `always_yes` (set by --force)
+                # implies "overwrite all"; `non_interactive` without
+                # `always_yes` implies "skip" so a CI never hangs on
+                # stdin or raises EOFError.
+                if self.always_yes:
+                    print("✓ --force / always_yes set: overwriting all conflicts")
+                    response = "o"
+                elif self.non_interactive:
+                    print("✓ --non-interactive set: skipping all conflicting modules")
+                    response = "s"
+                else:
+                    print("\nOptions:")
+                    print("  o - Overwrite all in Visio with local content")
+                    print("  s - Skip changed files (keep Visio content)")
+                    print("  i - Interactive (choose per file)")
+                    print("  c - Cancel import for this document")
+                    response = input("\nChoose action (o/s/i/C): ").strip().lower()
 
                 if response == "o":
                     # Overwrite all

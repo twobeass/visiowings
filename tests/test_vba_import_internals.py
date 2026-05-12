@@ -149,3 +149,63 @@ class TestFindDocumentForFile:
         importer.document_map = {"drawing1": MagicMock()}
         path = Path("/ws/elsewhere/Module1.bas")
         assert importer._find_document_for_file(path) is None
+
+
+# --------------------------------------------------------------------------- #
+# UAT iter3 #2 — --force / --non-interactive plumbing
+# --------------------------------------------------------------------------- #
+class TestForceFlagPlumbing:
+    """`--force` must imply `always_yes`; `--non-interactive` must set
+    `non_interactive`. Both keep the batch conflict prompt from raising
+    `EOFError` in CI / UAT runs."""
+
+    def test_defaults_are_interactive(self):
+        importer = VisioVBAImporter("dummy.vsdm")
+        assert importer.always_yes is False
+        assert importer.non_interactive is False
+
+    def test_always_yes_propagated(self):
+        importer = VisioVBAImporter("dummy.vsdm", always_yes=True)
+        assert importer.always_yes is True
+
+    def test_non_interactive_propagated(self):
+        importer = VisioVBAImporter("dummy.vsdm", non_interactive=True)
+        assert importer.non_interactive is True
+
+    def test_cli_force_implies_always_yes_in_import(self, monkeypatch, tmp_path):
+        """`cmd_import` must pass `always_yes=force` to the importer."""
+
+        from visiowings import cli
+
+        captured: dict = {}
+
+        class _StubImporter:
+            def __init__(self, *_a, **kwargs):
+                captured.update(kwargs)
+
+            def import_modules_from_dir(self, *_a, **_kw):
+                return 0
+
+        # `cmd_import` lazy-imports VisioVBAImporter from .vba_import.
+        import visiowings.vba_import as vi
+
+        monkeypatch.setattr(vi, "VisioVBAImporter", _StubImporter)
+        monkeypatch.setattr(cli, "_validate_visio_file", lambda p: p)
+        monkeypatch.setattr(cli, "_validate_readable_dir", lambda p, label: p)
+
+        import argparse
+
+        args = argparse.Namespace(
+            file=tmp_path / "dummy.vsdm",
+            input=str(tmp_path),
+            force=True,
+            non_interactive=False,
+            debug=False,
+            codepage=None,
+            rubberduck=False,
+        )
+        cli.cmd_import(args)
+
+        assert captured.get("force_document") is True
+        assert captured.get("always_yes") is True
+        assert captured.get("non_interactive") is False

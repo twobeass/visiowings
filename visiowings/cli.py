@@ -175,6 +175,7 @@ def cmd_edit(args):
     importer = VisioVBAImporter(
         str(visio_file),
         force_document=args.force,
+        always_yes=args.force,
         debug=debug,
         silent_reconnect=True,
         user_codepage=codepage,
@@ -373,10 +374,14 @@ def cmd_import(args):
 
     from .vba_import import VisioVBAImporter
 
+    force = getattr(args, "force", False)
+    non_interactive = getattr(args, "non_interactive", False)
+
     logger.debug("cmd_import starting: file=%s input=%s", visio_file, input_dir)
     logger.debug(
-        "force=%s codepage=%s rubberduck=%s",
-        getattr(args, "force", False),
+        "force=%s non_interactive=%s codepage=%s rubberduck=%s",
+        force,
+        non_interactive,
         codepage or "<auto>",
         use_rubberduck,
     )
@@ -386,7 +391,12 @@ def cmd_import(args):
 
     importer = VisioVBAImporter(
         str(visio_file),
-        force_document=args.force,
+        force_document=force,
+        # --force implies "overwrite all conflicts" so the batch conflict
+        # prompt doesn't hang on stdin (and ThisDocument is still gated
+        # via force_document above).
+        always_yes=force,
+        non_interactive=non_interactive,
         debug=debug,
         user_codepage=codepage,
         use_rubberduck=use_rubberduck,
@@ -554,7 +564,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--input", "-i", help="Import directory (default: current directory)"
     )
     import_parser.add_argument(
-        "--force", action="store_true", help="Overwrite document modules (ThisDocument.cls)"
+        "--force",
+        action="store_true",
+        help=(
+            "Overwrite Document modules (ThisDocument.cls) AND auto-resolve "
+            "conflict prompts as 'overwrite all'. Implies --non-interactive."
+        ),
+    )
+    import_parser.add_argument(
+        "--non-interactive",
+        "-y",
+        action="store_true",
+        help=(
+            "Never prompt on stdin: skip conflicting modules instead. "
+            "Useful for CI; combine with --force to overwrite instead of skip."
+        ),
     )
     import_parser.add_argument(
         "--debug",
