@@ -19,6 +19,7 @@ class VisioVBAImporter:
         silent_reconnect=False,
         always_yes=False,
         non_interactive=False,
+        ephemeral=False,
         user_codepage=None,
         use_rubberduck=False,
     ):
@@ -34,6 +35,15 @@ class VisioVBAImporter:
         # When True we never call ``input()``: any unresolved conflict
         # defaults to "skip" so a CI run never hangs or raises EOFError.
         self.non_interactive = non_interactive
+        # Default behaviour: visiowings edits the VBProject in memory,
+        # leaving the document marked as dirty so Visio prompts to save
+        # on close — the natural "I just imported VBA, of course persist
+        # it" UX for end users. CI / UAT runs that want the .vsdm on
+        # disk to stay pristine set ``ephemeral=True`` (or pass
+        # ``--ephemeral`` on the CLI). After the batch finishes we then
+        # clear each touched document's ``Saved`` flag back to ``True``,
+        # which makes Visio close without persisting.
+        self.ephemeral = ephemeral
         self.user_codepage = user_codepage
         self.codepage = DEFAULT_CODEPAGE
         self.use_rubberduck = use_rubberduck
@@ -891,4 +901,46 @@ class VisioVBAImporter:
             if files_identical_count > 0:
                 print(f"✓ {files_identical_count} modules up-to-date (skipped)")
 
+        if self.ephemeral and total_imported > 0:
+            self._clear_dirty_flag()
+
         return total_imported
+
+    def _clear_dirty_flag(self) -> None:
+        """Reset ``Document.Saved`` to ``True`` on every touched document.
+
+        VBProject edits flip Visio's internal dirty marker
+        (``Document.Saved = False``). On close, Visio then either
+        prompts the user or auto-saves the document depending on
+        settings, which writes the imported VBA back to ``.vsdm`` on
+        disk. That's the right behaviour for real users; for CI / UAT
+        runs that want to keep the fixture pristine across iterations
+        we flip the flag back to ``True`` so Visio thinks nothing was
+        modified.
+
+        Iterates every document discovered via the document manager so
+        multi-document imports (drawing + stencil + template) are all
+        cleared, not just the main one.
+        """
+
+        targets = []
+        try:
+            for doc_info in (
+                self.doc_manager.get_all_documents_with_vba() if self.doc_manager else []
+            ):
+                if doc_info and doc_info.doc is not None:
+                    targets.append(doc_info)
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] _clear_dirty_flag: enumerate failed: {e}")
+
+        for doc_info in targets:
+            try:
+                doc_info.doc.Saved = True
+                if self.debug:
+                    print(f"[DEBUG] Cleared dirty flag on {doc_info.name}")
+            except Exception as e:
+                # Best-effort: a stencil opened read-only, or COM saying no.
+                # Don't break the import for a cosmetic flag reset.
+                if self.debug:
+                    print(f"[DEBUG] Could not clear dirty flag on {doc_info.name}: {e}")

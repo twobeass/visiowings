@@ -376,12 +376,14 @@ def cmd_import(args):
 
     force = getattr(args, "force", False)
     non_interactive = getattr(args, "non_interactive", False)
+    ephemeral = getattr(args, "ephemeral", False)
 
     logger.debug("cmd_import starting: file=%s input=%s", visio_file, input_dir)
     logger.debug(
-        "force=%s non_interactive=%s codepage=%s rubberduck=%s",
+        "force=%s non_interactive=%s ephemeral=%s codepage=%s rubberduck=%s",
         force,
         non_interactive,
+        ephemeral,
         codepage or "<auto>",
         use_rubberduck,
     )
@@ -397,6 +399,7 @@ def cmd_import(args):
         # via force_document above).
         always_yes=force,
         non_interactive=non_interactive,
+        ephemeral=ephemeral,
         debug=debug,
         user_codepage=codepage,
         use_rubberduck=use_rubberduck,
@@ -578,6 +581,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Never prompt on stdin: skip conflicting modules instead. "
             "Useful for CI; combine with --force to overwrite instead of skip."
+        ),
+    )
+    import_parser.add_argument(
+        "--ephemeral",
+        action="store_true",
+        help=(
+            "Apply VBA changes to the running Visio session only — clear "
+            "the document's dirty flag after import so closing Visio does "
+            "NOT persist the changes to the .vsdm on disk. Useful for "
+            "UAT / CI runs that want a pristine fixture across iterations."
         ),
     )
     import_parser.add_argument(

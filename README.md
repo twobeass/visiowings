@@ -155,7 +155,9 @@ Use Rubberduck-compatible folder annotations (`@Folder("Folder.Sub")`) to organi
 | `--file`, `-f`         | Visio file path (`.vsdm`, `.vsdx`, `.vssm`, `.vssx`, `.vstm`, `.vstx`)    |
 | `--output`, `-o`       | Export directory (default: current directory)                            |
 | `--input`, `-i`        | Import directory (for import command)                                    |
-| `--force`              | Overwrite Document modules (ThisDocument.cls)                            |
+| `--force`              | Overwrite Document modules (ThisDocument.cls) AND auto-resolve all conflict prompts as "overwrite" |
+| `--non-interactive`, `-y` | Never prompt on stdin; skip conflicts (or overwrite if combined with `--force`) — for CI |
+| `--ephemeral`          | (`import` only) Clear the document's dirty flag after import so closing Visio does *not* write back to .vsdm |
 | `--bidirectional`      | Enable bidirectional sync (Visio ↔ VS Code)                              |
 | `--sync-delete-modules`| Automatically delete Visio modules when matching files are deleted        |
 | `--rubberduck`, `--rd` | Enable Rubberduck @Folder annotation support for directory structure      |

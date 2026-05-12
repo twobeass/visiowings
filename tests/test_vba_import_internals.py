@@ -172,6 +172,55 @@ class TestForceFlagPlumbing:
         importer = VisioVBAImporter("dummy.vsdm", non_interactive=True)
         assert importer.non_interactive is True
 
+    def test_ephemeral_propagated(self):
+        importer = VisioVBAImporter("dummy.vsdm", ephemeral=True)
+        assert importer.ephemeral is True
+
+    def test_clear_dirty_flag_resets_saved_on_every_touched_doc(self):
+        """`--ephemeral` flips `Document.Saved = True` on every doc visited."""
+        importer = VisioVBAImporter("dummy.vsdm", ephemeral=True)
+
+        # Build a fake doc_manager exposing 3 documents.
+        d1 = MagicMock(name="main.vsdm")
+        d1.doc = MagicMock(name="vsdm_doc")
+        d2 = MagicMock(name="stencil.vssm")
+        d2.doc = MagicMock(name="vssm_doc")
+        d3 = MagicMock(name="template.vstm")
+        d3.doc = MagicMock(name="vstm_doc")
+
+        importer.doc_manager = MagicMock()
+        importer.doc_manager.get_all_documents_with_vba.return_value = [d1, d2, d3]
+
+        importer._clear_dirty_flag()
+
+        assert d1.doc.Saved is True
+        assert d2.doc.Saved is True
+        assert d3.doc.Saved is True
+
+    def test_clear_dirty_flag_survives_per_doc_errors(self):
+        """A single read-only stencil must not stop us from clearing the rest."""
+        importer = VisioVBAImporter("dummy.vsdm", ephemeral=True)
+
+        good = MagicMock(name="ok")
+        good.doc = MagicMock(name="ok_doc")
+
+        # Build a doc whose Saved setter raises (e.g. read-only).
+        bad = MagicMock(name="readonly")
+        bad_doc = MagicMock(name="ro_doc")
+        type(bad_doc).Saved = property(
+            lambda self: True,
+            lambda self, v: (_ for _ in ()).throw(Exception("read-only")),
+        )
+        bad.doc = bad_doc
+
+        importer.doc_manager = MagicMock()
+        importer.doc_manager.get_all_documents_with_vba.return_value = [bad, good]
+
+        importer._clear_dirty_flag()
+
+        # The healthy doc still gets the flag.
+        assert good.doc.Saved is True
+
     def test_non_interactive_propagates_to_subparser(self):
         """`--non-interactive` flag on `import` reaches argparse."""
         from visiowings.cli import _build_parser
