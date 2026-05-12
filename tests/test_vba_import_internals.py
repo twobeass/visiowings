@@ -197,6 +197,52 @@ class TestForceFlagPlumbing:
         assert d2.doc.Saved is True
         assert d3.doc.Saved is True
 
+    def test_create_temp_file_raises_on_emoji_in_cp1252(self, tmp_path):
+        """Iter3 #4 (DATA LOSS): an emoji in a cp1252 doc must raise upfront,
+        BEFORE we touch the existing module, so the user keeps their code."""
+        from visiowings.exceptions import EncodingIncompatibilityError
+
+        importer = VisioVBAImporter("dummy.vsdm")
+        importer.codepage = "cp1252"
+        bas = tmp_path / "BasicLogic.bas"
+        bas.write_text("' Earth: 🌍\nSub Foo()\nEnd Sub\n", encoding="utf-8")
+
+        try:
+            importer._create_temp_codepage_file(bas, "cp1252")
+        except EncodingIncompatibilityError as exc:
+            assert exc.file == "BasicLogic.bas"
+            assert exc.codepage == "cp1252"
+            assert "🌍" in exc.sample_chars
+            assert "cp65001" in exc.message  # the hint points at UTF-8
+        else:
+            raise AssertionError("expected EncodingIncompatibilityError")
+
+    def test_create_temp_file_succeeds_for_pure_ascii_in_cp1252(self, tmp_path):
+        importer = VisioVBAImporter("dummy.vsdm")
+        importer.codepage = "cp1252"
+        bas = tmp_path / "BasicLogic.bas"
+        bas.write_text("Option Explicit\nSub Foo()\nEnd Sub\n", encoding="utf-8")
+
+        temp_path = importer._create_temp_codepage_file(bas, "cp1252")
+        try:
+            assert Path(temp_path).exists()
+            # Content round-trips cleanly through cp1252.
+            assert "Option Explicit" in Path(temp_path).read_text(encoding="cp1252")
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def test_create_temp_file_emoji_ok_in_cp65001(self, tmp_path):
+        """UTF-8 (cp65001) representation must NOT raise — that's the recommended override."""
+        importer = VisioVBAImporter("dummy.vsdm")
+        bas = tmp_path / "BasicLogic.bas"
+        bas.write_text("' Earth: 🌍\nSub Foo()\nEnd Sub\n", encoding="utf-8")
+
+        temp_path = importer._create_temp_codepage_file(bas, "utf-8")
+        try:
+            assert "🌍" in Path(temp_path).read_text(encoding="utf-8")
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
     def test_clear_dirty_flag_survives_per_doc_errors(self):
         """A single read-only stencil must not stop us from clearing the rest."""
         importer = VisioVBAImporter("dummy.vsdm", ephemeral=True)

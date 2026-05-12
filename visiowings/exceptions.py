@@ -52,6 +52,29 @@ class UnsupportedEncodingError(VisiowingsError):
         )
 
 
+class EncodingIncompatibilityError(VisiowingsError):
+    """A VBA file contains characters the target codepage cannot represent.
+
+    Raised during import when a `.bas` / `.cls` / `.frm` body contains
+    code points outside the document's resolved codepage (e.g. emoji or
+    CJK text in a cp1252 document). Re-encoding with ``errors="replace"``
+    would silently corrupt the source, and Visio's ``VBComponents.Import``
+    behaves erratically on partially-encodable temp files — so we refuse
+    the import upfront and surface the offending characters to the user.
+    """
+
+    def __init__(self, file: str, codepage: str, sample_chars: list[str]) -> None:
+        self.file = file
+        self.codepage = codepage
+        self.sample_chars = list(sample_chars)
+        sample = ", ".join(f"{c!r} (U+{ord(c):04X})" for c in self.sample_chars[:5])
+        super().__init__(
+            f"{file}: contains characters not representable in {codepage}: {sample}. "
+            f"Pass `--codepage cp65001` (UTF-8) or remove the offending characters; "
+            f"the original module in Visio was NOT modified."
+        )
+
+
 class COMConnectionError(VisiowingsError):
     """The COM connection to Visio dropped and could not be re-established."""
 
@@ -96,6 +119,7 @@ class InvalidVisioFileError(VisiowingsError):
 __all__ = [
     "COMConnectionError",
     "DocumentNotFoundError",
+    "EncodingIncompatibilityError",
     "InvalidVisioFileError",
     "UnsupportedEncodingError",
     "VBAImportError",

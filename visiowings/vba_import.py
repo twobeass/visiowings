@@ -250,8 +250,20 @@ class VisioVBAImporter:
             return raw.decode(fallback_codepage, errors="replace")
 
     def _create_temp_codepage_file(self, file_path, codepage, doc_info=None):
-        """Create a temporary file with configured encoding for VBA import."""
+        """Create a temporary file with the configured encoding for VBA import.
+
+        Refuses to silently replace characters that the target codepage
+        cannot represent — instead raises
+        :class:`EncodingIncompatibilityError` so the caller can surface
+        a clear "encoding override needed" error to the user and keep
+        the *existing* Visio module intact. The previous behaviour
+        (``errors="replace"``) corrupted the source on disk and, worse,
+        left the import in a half-applied state where the old module
+        had been removed but the new one couldn't be loaded.
+        """
         import tempfile
+
+        from .exceptions import EncodingIncompatibilityError
 
         text = self._decode_with_bom_detection(file_path, codepage)
 
@@ -265,24 +277,43 @@ class VisioVBAImporter:
             text = header + text
         if text and not text.endswith("\n"):
             text += "\n"
-        fd, temp_path = tempfile.mkstemp(suffix=file_path.suffix, text=True)
+
+        # Encode upfront, in memory. If the codepage can't represent some
+        # code point we want to fail BEFORE writing anything and BEFORE
+        # the caller removes the existing module — otherwise the user
+        # ends up with a deleted module and a half-imported temp file.
         try:
-            with os.fdopen(fd, "w", encoding=codepage) as f:
-                f.write(text)
+            encoded = text.encode(codepage)
+        except UnicodeEncodeError:
+            unencodable = sorted({c for c in text if not self._can_encode(c, codepage)})
+            raise EncodingIncompatibilityError(
+                file=file_path.name,
+                codepage=codepage,
+                sample_chars=unencodable,
+            ) from None
+
+        fd, temp_path = tempfile.mkstemp(suffix=file_path.suffix, text=False)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(encoded)
             if self.debug:
                 print(f"[DEBUG] Created temp {codepage.upper()} file: {temp_path}")
             return temp_path
-        except UnicodeEncodeError:
-            print(
-                f"⚠️  Warning: {file_path.name} contains characters not supported in {codepage.upper()}"
-            )
-            with os.fdopen(fd, "w", encoding=codepage, errors="replace") as f:
-                f.write(text)
-            return temp_path
         except Exception:
-            os.close(fd)
-            Path(temp_path).unlink()
+            try:
+                Path(temp_path).unlink()
+            except OSError:
+                # Temp file may have already been auto-cleaned; nothing to do.
+                pass
             raise
+
+    @staticmethod
+    def _can_encode(char: str, codepage: str) -> bool:
+        try:
+            char.encode(codepage)
+        except UnicodeEncodeError:
+            return False
+        return True
 
     def import_module(self, file_path, edit_mode=False):
         """Import a single module. Used by file watcher."""
@@ -330,11 +361,23 @@ class VisioVBAImporter:
                 ):
                     print(f"⊘ Skipped: {module_name}")
                     return False
+
+            # Build the temp file BEFORE removing the existing module so a
+            # codepage mismatch (e.g. emoji in a cp1252 doc) does not leave
+            # the user with a deleted module and no replacement.
+            from .exceptions import EncodingIncompatibilityError
+
+            try:
+                temp_file = self._create_temp_codepage_file(
+                    file_path, self.codepage, doc_info=target_doc_info
+                )
+            except EncodingIncompatibilityError as enc_exc:
+                print(f"✗ {target_doc_info.folder_name}/{file_path.name}: {enc_exc.message}")
+                return False
+
+            if component:
                 vb_project.VBComponents.Remove(component)
 
-            temp_file = self._create_temp_codepage_file(
-                file_path, self.codepage, doc_info=target_doc_info
-            )
             vb_project.VBComponents.Import(str(temp_file))
 
             # Verify the imported component name matches the intended name
@@ -830,18 +873,33 @@ class VisioVBAImporter:
                     continue
 
             # Execute Imports
+            from .exceptions import EncodingIncompatibilityError
+
             for file_path, component, is_doc_mod in files_to_import:
                 try:
                     if is_doc_mod:
                         self._import_document_module_content(component, file_path)
                         print(f"✓ Imported: {doc_info.folder_name}/{file_path.name} (force)")
                     else:
+                        # Pre-flight: build the temp file BEFORE removing the
+                        # existing module. If the file body can't be encoded
+                        # to the document's codepage,
+                        # `_create_temp_codepage_file` raises an
+                        # `EncodingIncompatibilityError` we surface as a clear
+                        # error — and the in-Visio module stays intact.
+                        try:
+                            temp_file = self._create_temp_codepage_file(
+                                file_path, self.codepage, doc_info=doc_info
+                            )
+                        except EncodingIncompatibilityError as enc_exc:
+                            print(f"✗ {doc_info.folder_name}/{file_path.name}: {enc_exc.message}")
+                            # IMPORTANT: do NOT remove the existing component
+                            # and do NOT count this as imported.
+                            continue
+
                         if component:
                             vb_project.VBComponents.Remove(component)
 
-                        temp_file = self._create_temp_codepage_file(
-                            file_path, self.codepage, doc_info=doc_info
-                        )
                         vb_project.VBComponents.Import(str(temp_file))
 
                         # Verify the imported component name matches the intended name to prevent "ModuleName1" bug
