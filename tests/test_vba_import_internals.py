@@ -175,9 +175,7 @@ class TestCompareUnderRubberduck:
         )
 
         # Visio mirrors the same annotated body.
-        comp = self._component(
-            '\'@Folder("Helpers")\nOption Explicit\nSub Foo()\nEnd Sub\n'
-        )
+        comp = self._component('\'@Folder("Helpers")\nOption Explicit\nSub Foo()\nEnd Sub\n')
 
         diff, *_ = importer._compare_module_content(bas, comp, doc_info=self._doc_info())
         assert diff is False
