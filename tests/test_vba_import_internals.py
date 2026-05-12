@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -290,10 +291,11 @@ class TestForceFlagPlumbing:
             def import_modules_from_dir(self, *_a, **_kw):
                 return 0
 
-        # `cmd_import` lazy-imports VisioVBAImporter from .vba_import.
-        import visiowings.vba_import as vi
-
-        monkeypatch.setattr(vi, "VisioVBAImporter", _StubImporter)
+        # `cmd_import` lazy-imports VisioVBAImporter from .vba_import,
+        # so we patch the attribute on the already-loaded module via
+        # `sys.modules` rather than `import ... as` (which would conflict
+        # with the top-level `from visiowings.vba_import import …`).
+        monkeypatch.setattr(sys.modules["visiowings.vba_import"], "VisioVBAImporter", _StubImporter)
         monkeypatch.setattr(cli, "_validate_visio_file", lambda p: p)
         monkeypatch.setattr(cli, "_validate_readable_dir", lambda p, label: p)
 
