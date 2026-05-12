@@ -359,6 +359,11 @@ class VBAWatcher:
                         str(local_importer.visio_file_path),
                         debug=self.debug,
                         use_rubberduck=use_rubberduck,
+                        # The polling thread has no TTY: never prompt
+                        # on stdin. The exporter auto-resolves any local
+                        # divergence as "Visio wins" — the contract of
+                        # bidirectional sync (UAT §D4).
+                        non_interactive=True,
                     )
 
                     if thread_exporter.connect_to_visio(silent=True):

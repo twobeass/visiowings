@@ -23,6 +23,7 @@ class VisioVBAExporter:
         user_codepage=None,
         use_rubberduck=False,
         force_export_frx=False,
+        non_interactive=False,
     ):
         self.visio_file_path = visio_file_path
         self.visio_app = None
@@ -33,6 +34,13 @@ class VisioVBAExporter:
         self.codepage = DEFAULT_CODEPAGE
         self.use_rubberduck = use_rubberduck
         self.force_export_frx = force_export_frx
+        # When True, the per-document conflict prompt (the one the
+        # interactive `visiowings export` shows when local files differ
+        # from Visio) is suppressed and we auto-resolve as "overwrite
+        # all" — Visio wins. The bidirectional file watcher always sets
+        # this because the polling thread has no stdin attached, so an
+        # `input()` there raises `EOFError` mid-poll (UAT §D4).
+        self.non_interactive = non_interactive
         # Populated by ``export_modules``: documents whose per-doc export
         # raised (e.g. PermissionError on a read-only output directory).
         # Inspected by the CLI to translate per-doc failures into a
@@ -336,13 +344,25 @@ class VisioVBAExporter:
                 for _fname, info in files_with_changes.items():
                     print(f"   - {doc_info.folder_name}/{info['rel_path']}")
 
-                print("\nOptions:")
-                print("  o - Overwrite all with Visio content")
-                print("  s - Skip changed files (keep local changes)")
-                print("  i - Interactive (choose per file)")
-                print("  c - Cancel export for this document")
+                if self.non_interactive:
+                    # `--bidirectional` polling has no TTY: auto-resolve as
+                    # "overwrite all with Visio content" so the local files
+                    # stay in sync with the live VBProject — that IS the
+                    # contract of bidirectional sync (UAT §D4). The
+                    # alternative ("input()") raised EOFError mid-poll.
+                    print(
+                        "✓ bidirectional/non-interactive: overwriting "
+                        f"{len(files_with_changes)} local file(s) with Visio content"
+                    )
+                    response = "o"
+                else:
+                    print("\nOptions:")
+                    print("  o - Overwrite all with Visio content")
+                    print("  s - Skip changed files (keep local changes)")
+                    print("  i - Interactive (choose per file)")
+                    print("  c - Cancel export for this document")
 
-                response = input("\nChoose action (o/s/i/C): ").strip().lower()
+                    response = input("\nChoose action (o/s/i/C): ").strip().lower()
 
                 if response == "o":
                     # Overwrite all - proceed normally
@@ -505,11 +525,23 @@ class VisioVBAExporter:
                 rel_path = file.relative_to(doc_output_path)
                 print(f"   - {doc_info.folder_name}/{rel_path}")
 
-            print("\nOptions:")
-            print("  d - Delete local files")
-            print("  i - Import to Visio")
-            print("  k - Keep local files (default)")
-            response = input("\nChoose action (d/i/K): ").strip().lower()
+            if self.non_interactive:
+                # Bidirectional polling: keep the local files. Deleting
+                # them silently would be lossy, and importing-to-Visio
+                # without user confirmation can resurrect modules the
+                # user just intentionally removed. "k" (keep) is the
+                # only safe default for an unattended sweep.
+                print(
+                    f"✓ bidirectional/non-interactive: keeping {len(files_to_delete)} "
+                    "local file(s) that are missing in Visio"
+                )
+                response = "k"
+            else:
+                print("\nOptions:")
+                print("  d - Delete local files")
+                print("  i - Import to Visio")
+                print("  k - Keep local files (default)")
+                response = input("\nChoose action (d/i/K): ").strip().lower()
 
             if response == "d":
                 for file in files_to_delete:
