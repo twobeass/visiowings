@@ -111,6 +111,96 @@ class TestEnsureFolderAnnotation:
 
 
 # --------------------------------------------------------------------------- #
+# UAT iter4 #6 — `import --rd` must mark a moved file as "different"
+# --------------------------------------------------------------------------- #
+class TestCompareUnderRubberduck:
+    """`_compare_module_content` must apply the rubberduck folder
+    transformation to the on-disk text before comparing, so that a
+    `Helpers/BasicLogic.bas` whose body otherwise matches Visio is
+    detected as "needs import" — the import then injects
+    `'@Folder("Helpers")` into the live module (§F3).
+    """
+
+    def _doc_info(self, folder_name: str = "sample"):
+        info = MagicMock()
+        info.folder_name = folder_name
+        return info
+
+    def _component(self, code: str):
+        comp = MagicMock(name="comp")
+        comp.CodeModule.Lines.return_value = code
+        comp.CodeModule.CountOfLines = len(code.splitlines())
+        return comp
+
+    def test_moved_file_under_rd_diffs_as_different(self, tmp_path):
+        """`<seed>/sample/Helpers/BasicLogic.bas` whose body matches
+        Visio's existing BasicLogic (without @Folder) must compare as
+        DIFFERENT so the import path runs."""
+
+        importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=True)
+        sample_dir = tmp_path / "sample" / "Helpers"
+        sample_dir.mkdir(parents=True)
+        bas = sample_dir / "BasicLogic.bas"
+        bas.write_text(
+            'Attribute VB_Name = "BasicLogic"\nOption Explicit\nSub Foo()\nEnd Sub\n',
+            encoding="utf-8",
+        )
+
+        # Visio has the same body but NO @Folder annotation.
+        comp = self._component("Option Explicit\nSub Foo()\nEnd Sub\n")
+
+        diff_no_rd_doc, *_ = importer._compare_module_content(bas, comp)
+        diff_rd, *_ = importer._compare_module_content(bas, comp, doc_info=self._doc_info())
+
+        # Without doc_info we mirror the OLD behaviour (would skip).
+        assert diff_no_rd_doc is False
+        # With doc_info the path-derived annotation makes the file differ,
+        # so the importer schedules a re-import.
+        assert diff_rd is True
+
+    def test_same_folder_annotation_compares_equal(self, tmp_path):
+        """If the file already carries the right `'@Folder("Helpers")`
+        and Visio's body matches identically, the file is correctly
+        treated as up-to-date — no spurious re-imports."""
+
+        importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=True)
+        helpers = tmp_path / "sample" / "Helpers"
+        helpers.mkdir(parents=True)
+        bas = helpers / "BasicLogic.bas"
+        bas.write_text(
+            'Attribute VB_Name = "BasicLogic"\n'
+            '\'@Folder("Helpers")\n'
+            "Option Explicit\nSub Foo()\nEnd Sub\n",
+            encoding="utf-8",
+        )
+
+        # Visio mirrors the same annotated body.
+        comp = self._component(
+            '\'@Folder("Helpers")\nOption Explicit\nSub Foo()\nEnd Sub\n'
+        )
+
+        diff, *_ = importer._compare_module_content(bas, comp, doc_info=self._doc_info())
+        assert diff is False
+
+    def test_compare_without_rd_ignores_path(self, tmp_path):
+        """When `use_rubberduck=False`, the path is irrelevant: the
+        same body diffs as identical even if it lives in a subfolder."""
+
+        importer = VisioVBAImporter("dummy.vsdm", use_rubberduck=False)
+        nested = tmp_path / "sample" / "Helpers"
+        nested.mkdir(parents=True)
+        bas = nested / "BasicLogic.bas"
+        bas.write_text(
+            'Attribute VB_Name = "BasicLogic"\nOption Explicit\nSub Foo()\nEnd Sub\n',
+            encoding="utf-8",
+        )
+
+        comp = self._component("Option Explicit\nSub Foo()\nEnd Sub\n")
+        diff, *_ = importer._compare_module_content(bas, comp, doc_info=self._doc_info())
+        assert diff is False
+
+
+# --------------------------------------------------------------------------- #
 # _find_document_for_file
 # --------------------------------------------------------------------------- #
 class TestFindDocumentForFile:

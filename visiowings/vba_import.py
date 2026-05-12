@@ -357,7 +357,11 @@ class VisioVBAImporter:
 
             if component:
                 if not self._prompt_overwrite(
-                    module_name, file_path, component, edit_mode=edit_mode
+                    module_name,
+                    file_path,
+                    component,
+                    edit_mode=edit_mode,
+                    doc_info=target_doc_info,
                 ):
                     print(f"⊘ Skipped: {module_name}")
                     return False
@@ -584,9 +588,19 @@ class VisioVBAImporter:
         # Join with consistent line ending
         return "\n".join(normalized_lines)
 
-    def _compare_module_content(self, file_path, component):
+    def _compare_module_content(self, file_path, component, doc_info=None):
         """Compare local file with Visio module content using normalization.
+
         Returns: (are_different, local_hash, visio_hash)
+
+        When the importer is in Rubberduck mode (``use_rubberduck=True``)
+        and the caller supplies ``doc_info``, the disk content is first
+        transformed via :meth:`_ensure_folder_annotation` so that the
+        expected ``'@Folder("...")`` derived from the file's location on
+        disk participates in the comparison. Otherwise a freshly-moved
+        file (e.g. ``sample/Helpers/Mod.bas`` whose Visio counterpart
+        still has no annotation) would diff as "identical" and never
+        get re-imported — silently breaking UAT §F3.
         """
         try:
             file_code = self._read_module_code(file_path)
@@ -595,6 +609,9 @@ class VisioVBAImporter:
                 if component.CodeModule.CountOfLines > 0
                 else ""
             )
+
+            if self.use_rubberduck and doc_info is not None:
+                file_code = self._ensure_folder_annotation(file_code, file_path, doc_info)
 
             # Normalize both: strip ALL headers for fair comparison
             file_normalized = self._strip_vba_header(file_code, keep_vb_name=False)
@@ -616,14 +633,14 @@ class VisioVBAImporter:
                 print(f"[DEBUG] Error comparing {file_path.name}: {type(e).__name__}: {e}")
             return True, None, None
 
-    def _prompt_overwrite(self, module_name, file_path, comp, edit_mode=False):
+    def _prompt_overwrite(self, module_name, file_path, comp, edit_mode=False, doc_info=None):
         """Compare module content, ignoring ALL Attribute differences for comparison"""
         if self.debug:
             print(f"[DEBUG] Overwrite prompt called, edit_mode={edit_mode}")
         if edit_mode:
             return True  # Always overwrite in edit mode, don't prompt
 
-        are_different, _, _ = self._compare_module_content(file_path, comp)
+        are_different, _, _ = self._compare_module_content(file_path, comp, doc_info=doc_info)
 
         if not are_different or self.always_yes:
             return True
@@ -789,7 +806,9 @@ class VisioVBAImporter:
                         else:
                             print(f"⚠️  Document module '{module_name}' skipped without --force.")
                     else:
-                        are_different, _, _ = self._compare_module_content(file_path, component)
+                        are_different, _, _ = self._compare_module_content(
+                            file_path, component, doc_info=doc_info
+                        )
                         if are_different:
                             files_with_changes[module_name] = {
                                 "path": file_path,
