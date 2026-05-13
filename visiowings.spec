@@ -2,8 +2,8 @@
 
 
 a = Analysis(
-    ['visiowings\\cli.py'],
-    pathex=[],
+    ['pyinstaller_entry.py'],
+    pathex=['.'],
     binaries=[],
     datas=[('README.md', '.'), ('LICENSE', '.')],
     hiddenimports=['win32com.client', 'pythoncom', 'pywintypes', 'watchdog.observers', 'watchdog.events'],

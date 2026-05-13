@@ -95,9 +95,9 @@ jobs:
           name: provenance
           path: |
             sbom.cdx.json
-            sbom.cdx.json.sigstore
+            sbom.cdx.json.sigstore.json
             licenses.json
-            licenses.json.sigstore
+            licenses.json.sigstore.json
           retention-days: 90
 
       - name: Attach to GitHub Release
@@ -105,9 +105,9 @@ jobs:
         with:
           files: |
             sbom.cdx.json
-            sbom.cdx.json.sigstore
+            sbom.cdx.json.sigstore.json
             licenses.json
-            licenses.json.sigstore
+            licenses.json.sigstore.json
           fail_on_unmatched_files: true
 
   # ------------------------------------------------------------------ #
