@@ -24,6 +24,18 @@ test-ci:
 test-fast:
     pytest -m "not windows_only and not slow" -x
 
+# Run the in-tree UAT suite (Windows + Visio required; auto-skips otherwise)
+test-uat:
+    pytest tests/uat --no-cov
+
+# Build the minimal Visio fixture set used by `test-uat` (Windows + Visio required)
+uat-fixtures:
+    python -m tests.uat.setup.fixture_factory
+
+# One-shot Trust Center bootstrap for the UAT suite (HKCU writes only)
+uat-trust-center:
+    python -m tests.uat.setup.trust_center
+
 # Lint + format + type-check (read-only)
 lint:
     ruff check .

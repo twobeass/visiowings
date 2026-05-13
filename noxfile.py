@@ -48,6 +48,25 @@ def docs(session: nox.Session) -> None:
     session.run("mkdocs", "build", "--strict")
 
 
+@nox.session(python="3.12", venv_backend="none")
+def uat(session: nox.Session) -> None:
+    """Run the in-tree UAT suite (Windows + Visio required).
+
+    Uses the host interpreter so the COM bindings (pywin32) resolve against
+    the system's registered Office installation. Auto-skips its real tests
+    when Office apps are not detected.
+    """
+
+    session.run(
+        "pytest",
+        "tests/uat",
+        "--no-cov",
+        "-ra",
+        *session.posargs,
+        external=True,
+    )
+
+
 @nox.session(python="3.12")
 def security(session: nox.Session) -> None:
     """Run pip-audit + bandit scans."""
