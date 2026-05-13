@@ -52,6 +52,13 @@ docs = [
     "mkdocs-literate-nav>=0.6",
     "mkdocs-section-index>=0.3",
 ]
+uat = [
+    "pytest>=7.4",
+    "pytest-timeout>=2.2",
+    "pytest-rerunfailures>=14",
+    "psutil>=5.9",
+    "pywin32>=306; sys_platform == 'win32'",
+]
 
 [project.urls]
 Homepage = "https://github.com/twobeass/visiowings"
@@ -106,6 +113,12 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]  # asserts are how pytest works
+"tests/uat/**/*.py" = [
+    "S101",   # asserts are how pytest works
+    "TC003",  # the UAT helpers use stdlib types at runtime; TC003 false-positives
+    "RUF002", # docstrings contain EN DASHes by design (typographic prose)
+    "RUF003",
+]
 "docs/**/*.py"  = ["I", "F"]
 "build_exe.py"  = ["I"]  # script-style PyInstaller helper
 
@@ -173,6 +186,14 @@ markers = [
     "windows_only: tests that require a real Windows + Visio environment",
     "slow: tests that take more than a few seconds",
     "integration: end-to-end tests against real Visio",
+    # UAT suite markers (tests/uat/*)
+    "section(id, ref=''): UAT section identifier and optional doc anchor",
+    "requires_office(app): skip if the named Office app is not installed",
+    "requires_python_version(spec): skip if interpreter doesn't match PEP 440 spec",
+    "requires_docker: skip if docker is not on PATH",
+    "requires_network: skip if no network access (mainly for API-backed steps)",
+    "manual_signoff(reason): set up the precondition, then skip and surface in report",
+    "not_yet_implemented(iter): marks a test as a placeholder for a later iteration",
 ]
 filterwarnings = [
     "error",

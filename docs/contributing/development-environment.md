@@ -18,6 +18,9 @@ at the repo root. Type `just` (no args) for the full list.
 | `just test` | Full pytest suite (mirrors CI). |
 | `just test-ci` | Same, plus JUnit + coverage XML artefacts. |
 | `just test-fast` | Skips `windows_only` and `slow` markers, fails fast. |
+| `just test-uat` | Run the in-tree UAT suite (`tests/uat/`) — Windows + Visio required, auto-skips otherwise. |
+| `just uat-fixtures` | Generate `fixtures/sample.vsdm` for the UAT suite. |
+| `just uat-trust-center` | One-shot Trust Center bootstrap (HKCU `AccessVBOM`=1). |
 | `just lint` | `ruff check` + `ruff format --check` + `mypy` (read-only). |
 | `just fmt` | `ruff check --fix` + `ruff format` (auto-fix). |
 | `just security` | `pip-audit --strict` + `bandit -ll`. |
@@ -58,6 +61,44 @@ so the second invocation is fast.
     Use [`pyenv`](https://github.com/pyenv/pyenv) on Linux/macOS or
     [`uv python install`](https://docs.astral.sh/uv/) on any platform to
     grab missing interpreters. Nox automatically finds them on `PATH`.
+
+## UAT automation: `tests/uat/`
+
+The repo ships a **pytest-driven UAT suite** that exercises the real
+`visiowings` CLI against a live Visio instance. Each test maps 1:1 to a
+section of [Human UAT](uat.md), so the markdown stays the source of truth
+and the automation backs it up.
+
+Layout:
+
+| Path | Purpose |
+| --- | --- |
+| `tests/uat/test_visiowings_uat.py` | One test per UAT section (§A–§L). |
+| `tests/uat/_helpers.py` | `run_branch`, `visiowings_cli`, `WatcherHandle`, `start_watcher`. |
+| `tests/uat/com_helpers/` | Visio / VBE / process zombie cleanup helpers. |
+| `tests/uat/setup/` | One-shot `bootstrap` (`fixture_factory`, `trust_center`, `office_detect`). |
+| `tests/uat/conftest.py` | Scoped fixtures + auto-skip when Office / Visio / network is unavailable. |
+| `tests/uat/markers.py` | `section`, `requires_office`, `manual_signoff`, `not_yet_implemented`, … |
+
+Bootstrap & run:
+
+```powershell
+pip install -e ".[uat]"                  # psutil, pywin32, pytest-timeout, …
+python -m tests.uat.setup.trust_center   # one-shot HKCU AccessVBOM=1
+python -m tests.uat.setup.fixture_factory  # creates fixtures/sample.vsdm
+pytest tests/uat --no-cov                # or `just test-uat`
+```
+
+A handful of sections (§C2/§D1-§D5/§E1/§E4) need a **user-opened** Visio
+with `fixtures/sample.vsdm` because cross-process `Dispatch("Visio.Application")`
+spawns a fresh instance on this Office build. The tests detect that
+prerequisite and skip with explicit instructions rather than failing.
+
+> The UAT suite was previously hosted in a sibling `vbatest` repo that
+> orchestrated both `visiowings` and `VBAlidator`. The visiowings-specific
+> half has been folded back into this repo so the suite no longer requires
+> a parallel checkout. The external `vbatest` orchestrator is now optional
+> and only useful for cross-repo (visiowings × VBAlidator) testing.
 
 ## Pre-commit hooks
 
