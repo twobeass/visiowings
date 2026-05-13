@@ -9,6 +9,14 @@ From version 0.6.1 onwards, this changelog is generated automatically by
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commit](https://www.conventionalcommits.org/) messages.
 
+## [1.0.1](https://github.com/twobeass/visiowings/compare/1.0.0...1.0.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **release:** unbreak the 1.0.0 release pipeline ([b3f6543](https://github.com/twobeass/visiowings/commit/b3f65434756ed67816fc57b2ddf8156eb1f8574c))
+* **release:** unbreak the 1.0.0 release pipeline (-&gt; 1.0.1) ([6d5ff99](https://github.com/twobeass/visiowings/commit/6d5ff991828ca4c4e8fa9b44709024b6bffea5db))
+
 ## [1.0.0](https://github.com/twobeass/visiowings/compare/0.6.1...1.0.0) (2026-05-13)
 
 
