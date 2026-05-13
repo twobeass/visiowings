@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visiowings"
-version = "0.6.1"
+version = "1.0.0"
 description = "VBA Editor for Microsoft Visio with VS Code integration"
 readme = "README.md"
 requires-python = ">=3.10"
