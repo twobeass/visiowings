@@ -257,14 +257,18 @@ Visio → Options → Trust Center → Macro Settings → ☑ "Trust access to t
 ---
 
 ## Roadmap
-- [ ] Python <-> Visio integration (`RunPython`)
+
+The 1.0 release stabilises the CLI surface (`edit`, `export`, `import`)
+and the file-format support; no breaking changes are planned before 2.0.
+Future enhancements being considered:
+
+- [ ] Python ↔ Visio integration (`RunPython`, similar to xlwings)
 - [ ] Configurable polling interval
-- [ ] Standalone executable (no Python required)
 - [ ] GUI version
 - [ ] Auto-backup before import
 - [ ] Diff viewer
 - [ ] `.visiowingsignore` file support
-- [ ] **Improve documentation with more advanced sync/import examples**
+- [ ] More advanced sync/import examples in the docs
 
 ---
 
