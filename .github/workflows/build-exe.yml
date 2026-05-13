@@ -24,9 +24,9 @@ jobs:
     outputs:
       artifact-name: visiowings-exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -56,7 +56,7 @@ jobs:
           }
 
       - name: Upload EXE artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: visiowings-exe
           path: dist/visiowings.exe
@@ -65,7 +65,7 @@ jobs:
 
       - name: Attach EXE to GitHub Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/visiowings.exe
           fail_on_unmatched_files: true
