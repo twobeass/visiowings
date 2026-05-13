@@ -175,6 +175,13 @@ class WatcherHandle:
                 except subprocess.TimeoutExpired:
                     self.proc.kill()
                     self.proc.wait(timeout=2.0)
+        # Close the captured stdout pipe so the daemon pump thread terminates
+        # cleanly and pytest's ResourceWarning filter does not flag the FD.
+        try:
+            if self.proc.stdout is not None:
+                self.proc.stdout.close()
+        except Exception:
+            pass
         return self.proc.returncode or 0
 
 
