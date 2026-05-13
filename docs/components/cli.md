@@ -41,14 +41,14 @@ def cmd_edit(args):
     # Initial export
     exporter = VisioVBAExporter(visio_file, debug)
     all_exported, all_hashes = exporter.export_modules(output_dir)
-    
+
     # Setup importer
     importer = VisioVBAImporter(visio_file, force, debug)
-    
+
     # Start watcher
     watcher = VBAWatcher(
-        output_dir, 
-        importer, 
+        output_dir,
+        importer,
         exporter=exporter,
         bidirectional=bidirectional,
         sync_delete_modules=sync_delete

@@ -7,6 +7,7 @@ Supports:
 
 Auto-detects all open documents and organizes VBA code by document.
 """
+
 import re
 from pathlib import Path
 
@@ -16,10 +17,12 @@ import win32com.client
 
 class VisioDocumentType:
     """Visio document type constants"""
-    DRAWING = 1    # visTypeDrawing
-    STENCIL = 2    # visTypeStencil
-    TEMPLATE = 3   # visTypeTemplate
-    
+
+    DRAWING = 1  # visTypeDrawing
+    STENCIL = 2  # visTypeStencil
+    TEMPLATE = 3  # visTypeTemplate
+
+
 def sanitize_document_name(name):
     """Sanitize document name for use as folder name"""
     # Use full name first to avoid path splitting issues on special chars
@@ -28,22 +31,23 @@ def sanitize_document_name(name):
     # but if we get a raw string, we should handle it robustly.
 
     # Just strip extension first
-    if '.' in name:
-        name = name.rsplit('.', 1)[0]
+    if "." in name:
+        name = name.rsplit(".", 1)[0]
 
     # Replace invalid characters with underscore
-    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+    name = re.sub(r'[<>:"/\\|?*]', "_", name)
 
     # Remove spaces
-    name = name.replace(' ', '_').lower()
+    name = name.replace(" ", "_").lower()
 
     # Remove consecutive underscores
-    name = re.sub(r'_+', '_', name)
+    name = re.sub(r"_+", "_", name)
 
     # Remove leading/trailing underscores
-    name = name.strip('_')
+    name = name.strip("_")
 
-    return name or 'document'
+    return name or "document"
+
 
 class VisioDocumentInfo:
     """Information about a Visio document"""
@@ -63,21 +67,25 @@ class VisioDocumentInfo:
             vb_project = self.doc.VBProject
             if vb_project and vb_project.VBComponents.Count > 0:
                 return True
-        except:
-            pass
+        except (AttributeError, pythoncom.com_error) as e:
+            # AttributeError: VBProject is not exposed (e.g. trust center
+            # disallows VBA access). com_error: VBA disabled for this doc.
+            if self.debug:
+                print(f"[DEBUG] No VBProject for {self.name}: {type(e).__name__}: {e}")
         return False
 
     def get_type_name(self):
         """Get human-readable document type name"""
         type_names = {
-            VisioDocumentType.DRAWING: 'Drawing',
-            VisioDocumentType.STENCIL: 'Stencil',
-            VisioDocumentType.TEMPLATE: 'Template'
+            VisioDocumentType.DRAWING: "Drawing",
+            VisioDocumentType.STENCIL: "Stencil",
+            VisioDocumentType.TEMPLATE: "Template",
         }
-        return type_names.get(self.type, 'Unknown')
+        return type_names.get(self.type, "Unknown")
 
     def __repr__(self):
         return f"VisioDocumentInfo(name='{self.name}', type={self.get_type_name()}, has_vba={self.has_vba})"
+
 
 class VisioDocumentManager:
     """Manages multiple Visio documents and stencils"""
@@ -92,16 +100,17 @@ class VisioDocumentManager:
     def connect_to_visio(self):
         """Connect to Visio and discover all open documents"""
         try:
-            # Ensure COM is initialized in this thread
+            # Ensure COM is initialized in this thread.
+            # CoInitialize raises com_error if the apartment is already set
+            # to a conflicting threading model (RPC_E_CHANGED_MODE); that's
+            # fine - it just means somebody initialised it ahead of us.
             try:
                 pythoncom.CoInitialize()
                 if self.debug:
                     print("[DEBUG] COM initialized in document_manager")
-            except:
-                # Already initialized, that's fine
+            except pythoncom.com_error as e:
                 if self.debug:
-                    print("[DEBUG] COM already initialized in document_manager")
-                pass
+                    print(f"[DEBUG] COM already initialized in document_manager ({e})")
 
             self.visio_app = win32com.client.Dispatch("Visio.Application")
 
@@ -111,7 +120,7 @@ class VisioDocumentManager:
 
             # Debug: Show all open documents
             if self.debug:
-                print(f"[DEBUG] Looking for: {str(self.main_file_path)}")
+                print(f"[DEBUG] Looking for: {self.main_file_path!s}")
                 print(f"[DEBUG] Filename: {main_file_name}")
                 print("[DEBUG] Open documents in Visio:")
 
@@ -138,7 +147,7 @@ class VisioDocumentManager:
                     if self.debug:
                         print("[DEBUG]     ✓ MATCHED (by filename)")
                         print("[DEBUG]     Note: Using filename match because paths differ")
-                        print(f"[DEBUG]     Expected: {str(self.main_file_path)}")
+                        print(f"[DEBUG]     Expected: {self.main_file_path!s}")
                         print(f"[DEBUG]     Actual:   {doc_full_path}")
                     break
 
@@ -164,6 +173,7 @@ class VisioDocumentManager:
             print(f"❌ Error connecting to Visio: {e}")
             if self.debug:
                 import traceback
+
                 traceback.print_exc()
             return False
 
@@ -172,6 +182,7 @@ class VisioDocumentManager:
         self.documents = []
 
         try:
+            assert self.visio_app is not None  # connect() guarantees this
             for doc in self.visio_app.Documents:
                 doc_info = VisioDocumentInfo(doc, debug=self.debug)
 

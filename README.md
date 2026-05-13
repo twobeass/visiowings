@@ -2,6 +2,13 @@
 
 VBA Editor for Microsoft Visio with VS Code integration – Edit Visio VBA modules in your favorite editor with live sync, Git support, and modern tooling. Inspired by xlwings.
 
+[![CI](https://github.com/twobeass/visiowings/actions/workflows/ci.yml/badge.svg)](https://github.com/twobeass/visiowings/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/visiowings.svg)](https://pypi.org/project/visiowings/)
+[![Python](https://img.shields.io/pypi/pyversions/visiowings.svg)](https://pypi.org/project/visiowings/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/twobeass/visiowings/badge)](https://securityscorecards.dev/viewer/?uri=github.com/twobeass/visiowings)
+[![Docs](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://twobeass.github.io/visiowings/)
+
 ---
 
 ## Table of Contents
@@ -43,19 +50,35 @@ Visio VBA Editor lacks modern tooling. visiowings brings:
 ## Installation
 ### Prerequisites
 - Windows (required for COM automation)
-- Python 3.8+
+- Python 3.10+
 - Microsoft Visio (with VBA support)
 
-### Install from GitHub (recommended)
+### Install with pipx (recommended)
+[`pipx`](https://pipx.pypa.io/) installs visiowings into an isolated
+environment and puts the `visiowings` command on your PATH:
+
 ```bash
-pip install git+https://github.com/twobeass/visiowings.git
+pipx install visiowings
 ```
+
+To upgrade later: `pipx upgrade visiowings`.
+
+### Install with pip
+```bash
+pip install visiowings
+```
+
+### Standalone Windows EXE (no Python required)
+Download `visiowings.exe` from the
+[latest GitHub Release](https://github.com/twobeass/visiowings/releases/latest)
+and place it somewhere on your PATH.
 
 ### Install from source
 ```bash
 git clone https://github.com/twobeass/visiowings.git
 cd visiowings
-pip install -e .
+pip install -e ".[dev]"
+pre-commit install
 ```
 
 ---
@@ -132,7 +155,9 @@ Use Rubberduck-compatible folder annotations (`@Folder("Folder.Sub")`) to organi
 | `--file`, `-f`         | Visio file path (`.vsdm`, `.vsdx`, `.vssm`, `.vssx`, `.vstm`, `.vstx`)    |
 | `--output`, `-o`       | Export directory (default: current directory)                            |
 | `--input`, `-i`        | Import directory (for import command)                                    |
-| `--force`              | Overwrite Document modules (ThisDocument.cls)                            |
+| `--force`              | Overwrite Document modules (ThisDocument.cls) AND auto-resolve all conflict prompts as "overwrite" |
+| `--non-interactive`, `-y` | Never prompt on stdin; skip conflicts (or overwrite if combined with `--force`) — for CI |
+| `--ephemeral`          | (`import` only) Clear the document's dirty flag after import so closing Visio does *not* write back to .vsdm |
 | `--bidirectional`      | Enable bidirectional sync (Visio ↔ VS Code)                              |
 | `--sync-delete-modules`| Automatically delete Visio modules when matching files are deleted        |
 | `--rubberduck`, `--rd` | Enable Rubberduck @Folder annotation support for directory structure      |
@@ -154,21 +179,27 @@ Use Rubberduck-compatible folder annotations (`@Folder("Folder.Sub")`) to organi
 
 ## Integration
 ### VS Code Setup
-- Associate `.bas`, `.cls`, `.frm` files:
-  ```json
-  {
-    "files.associations": {
-      "*.bas": "vba",
-      "*.cls": "vba",
-      "*.frm": "vba"
-    },
-    "editor.tabSize": 4,
-    "editor.insertSpaces": true
-  }
-  ```
-- Recommended Extensions:
-  - VBA syntax highlighting (`@ext:vba`)
-  - GitLens for Git history/blame
+
+For your *user* VBA workspace, associate `.bas`, `.cls`, `.frm`:
+
+```json
+{
+  "files.associations": {
+    "*.bas": "vba",
+    "*.cls": "vba",
+    "*.frm": "vba"
+  },
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true
+}
+```
+
+Recommended extensions: VBA syntax highlighting (`@ext:vba`), GitLens.
+
+> If you're hacking on visiowings itself, the repo already ships
+> `.vscode/settings.json` and `.vscode/extensions.json` with Ruff,
+> mypy, and pytest pre-wired. See
+> [Development environment](https://twobeass.github.io/visiowings/contributing/development-environment/).
 
 ### Git Integration
 - Initialize git:
@@ -239,7 +270,31 @@ Visio → Options → Trust Center → Macro Settings → ☑ "Trust access to t
 
 ## Contributing
 
-Help and PRs welcome!
+Help and PRs welcome! Quick start:
+
+```bash
+git clone https://github.com/twobeass/visiowings.git
+cd visiowings
+just install        # or: pip install -e ".[dev,docs]" && pre-commit install
+just lint && just test
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and
+[Development environment](https://twobeass.github.io/visiowings/contributing/development-environment/)
+for the tooling reference (`just`, `nox`, pre-commit, shared editor
+config).
+
+### Security & supply chain
+
+- Releases ship a **CycloneDX SBOM** + **license report**, both signed
+  with **Sigstore** (keyless OIDC). Verify any release artefact with
+  `sigstore verify github` — see
+  [Releasing → Verifying a release](https://twobeass.github.io/visiowings/contributing/releasing/#verifying-a-release).
+- Wheels and sdists are published to PyPI via **Trusted Publishing**
+  (no long-lived API tokens).
+- Supply-chain posture is tracked weekly via
+  [**OpenSSF Scorecard**](https://securityscorecards.dev/viewer/?uri=github.com/twobeass/visiowings).
+- Vulnerabilities? See [SECURITY.md](SECURITY.md).
 
 ---
 

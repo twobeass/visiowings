@@ -1,6 +1,7 @@
-import pytest
 from unittest.mock import MagicMock
+
 from visiowings.document_manager import VisioDocumentInfo
+
 
 class TestDocumentManager:
     def test_sanitize_name(self):

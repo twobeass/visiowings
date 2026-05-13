@@ -1,0 +1,142 @@
+name: Publish
+
+# Triggered when a GitHub Release is published. Builds wheel + sdist + EXE,
+# attaches SBOM and license report, then uploads to PyPI via OIDC Trusted
+# Publishing (no API tokens required - configure the publisher once in the
+# project settings on pypi.org).
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write   # attach assets to the GitHub Release
+  id-token: write   # OIDC for PyPI Trusted Publishing
+  attestations: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # Build wheel + sdist
+  # ------------------------------------------------------------------ #
+  build-distributions:
+    name: Build wheel + sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Verify metadata with twine
+        run: twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+          retention-days: 7
+
+  # ------------------------------------------------------------------ #
+  # Build standalone Windows EXE
+  # ------------------------------------------------------------------ #
+  build-exe:
+    name: Build Windows EXE
+    uses: ./.github/workflows/build-exe.yml
+    permissions:
+      contents: write
+
+  # ------------------------------------------------------------------ #
+  # Generate SBOM and license report
+  # ------------------------------------------------------------------ #
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: build-distributions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and SBOM tooling
+        run: |
+          pip install -e .
+          pip install cyclonedx-bom pip-licenses
+
+      - name: Generate CycloneDX SBOM
+        run: cyclonedx-py environment -o sbom.cdx.json
+
+      - name: Generate license report
+        run: pip-licenses --format=json --with-urls --with-license-file --no-license-path > licenses.json
+
+      - name: Sign SBOM with Sigstore (keyless OIDC)
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: sbom.cdx.json licenses.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provenance
+          path: |
+            sbom.cdx.json
+            sbom.cdx.json.sigstore
+            licenses.json
+            licenses.json.sigstore
+          retention-days: 90
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom.cdx.json
+            sbom.cdx.json.sigstore
+            licenses.json
+            licenses.json.sigstore
+          fail_on_unmatched_files: true
+
+  # ------------------------------------------------------------------ #
+  # Upload to PyPI via OIDC Trusted Publishing
+  # ------------------------------------------------------------------ #
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [build-distributions, sbom]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/visiowings
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true
+          verbose: true
+
+      - name: Attach distributions to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true

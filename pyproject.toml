@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,8 +7,9 @@ name = "visiowings"
 version = "0.6.1"
 description = "VBA Editor for Microsoft Visio with VS Code integration"
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "twobeass"},
 ]
@@ -16,19 +17,19 @@ keywords = ["visio", "vba", "editor", "vscode", "automation"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: Microsoft :: Windows",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Office/Business",
+    "Typing :: Typed",
 ]
 
 dependencies = [
-    "pywin32>=305",
+    "pywin32>=305; sys_platform == 'win32'",
     "watchdog>=3.0.0",
 ]
 
@@ -36,15 +37,28 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "black>=23.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0",
+    "hypothesis>=6.100",
+    "ruff>=0.6.0",
+    "mypy>=1.11",
+    "types-pywin32>=306.0",
+    "build>=1.2",
+    "pre-commit>=3.7",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+    "mkdocs-gen-files>=0.5",
+    "mkdocs-literate-nav>=0.6",
+    "mkdocs-section-index>=0.3",
 ]
 
 [project.urls]
 Homepage = "https://github.com/twobeass/visiowings"
 Repository = "https://github.com/twobeass/visiowings"
 Issues = "https://github.com/twobeass/visiowings/issues"
+Changelog = "https://github.com/twobeass/visiowings/blob/main/CHANGELOG.md"
+Documentation = "https://twobeass.github.io/visiowings/"
 
 [project.scripts]
 visiowings = "visiowings.cli:main"
@@ -52,37 +66,153 @@ visiowings = "visiowings.cli:main"
 [tool.setuptools]
 packages = ["visiowings"]
 
-[tool.black]
-line-length = 100
-target-version = ['py38']
+[tool.setuptools.package-data]
+visiowings = ["py.typed"]
 
+# ---------------------------------------------------------------------------
+# Ruff — Lint + Format (replaces black + isort)
+# ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py38"
+target-version = "py310"
+extend-exclude = ["build", "dist", ".venv", "site"]
 
 [tool.ruff.lint]
+# Curated baseline for visiowings.
+#
+# Aspirational rule families (BLE / TRY / SIM / PL) were tried during the
+# Phase A migration but the legacy COM bridge in vba_import.py /
+# vba_export.py / visio_connection.py was never written to those style
+# guides — `except Exception` and lazy `import pywin32` patterns are
+# load-bearing there. Re-enabling them is tracked as a follow-up after
+# the COM layer is refactored behind a typed adapter.
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "RUF",  # ruff-specific
+    "PTH",  # use pathlib
+    "PIE",  # flake8-pie
+    "RET",  # flake8-return
+    "TCH",  # type-checking imports
 ]
 ignore = [
-    "E501", # line too long (handled by formatter)
+    "E501",     # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]  # asserts are how pytest works
+"docs/**/*.py"  = ["I", "F"]
+"build_exe.py"  = ["I"]  # script-style PyInstaller helper
+
+[tool.ruff.lint.isort]
+known-first-party = ["visiowings"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ---------------------------------------------------------------------------
+# Mypy — Type-checking
+# ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false  # Start lenient, can be tightened later
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = false  # Start lenient, tighten per module
+strict_equality = true
+show_error_codes = true
+pretty = true
 
+[[tool.mypy.overrides]]
+# Strict mypy for these modules first; expand the list as type hints land.
+module = ["visiowings.encoding", "visiowings._retry", "visiowings.exceptions"]
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+# Third-party libs without type stubs
+module = ["watchdog.*", "win32com.*", "pythoncom", "pywintypes"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
+minversion = "7.0"
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=visiowings --cov-report=term-missing"
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=visiowings",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "-ra",
+]
+markers = [
+    "windows_only: tests that require a real Windows + Visio environment",
+    "slow: tests that take more than a few seconds",
+    "integration: end-to-end tests against real Visio",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:pkg_resources.*",
+    "ignore::DeprecationWarning:pywintypes.*",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["visiowings"]
+parallel = true
+concurrency = ["thread"]
+omit = [
+    "visiowings/__main__.py",
+    "tests/*",
+]
+
+[tool.coverage.report]
+# Coverage ratchet: this floor is raised every time a new test layer lands.
+# Phase C floor: 15% (encoding + import-internals + export-internals).
+# Phase D floor: 25% (+ _retry, exceptions, _logging at 100% each,
+#                       file-watcher debounce, BOM detection, CLI validators).
+# Phase F floor: 30% (+ config, update-check).
+# Long-term target after the COM modules are properly mockable: 80%.
+fail_under = 30
+show_missing = true
+skip_covered = false
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "raise AssertionError",
+    "@(abc\\.)?abstractmethod",
+    "\\.\\.\\.",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"

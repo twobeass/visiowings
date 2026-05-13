@@ -29,9 +29,11 @@ def list_open_documents(visio_app):
     """Listet alle geöffneten Visio-Dokumente auf"""
     documents = []
     for doc in visio_app.Documents:
-        documents.append({
-            'name': doc.Name,
-            'path': doc.FullName,
-            'has_vba': doc.VBProject.VBComponents.Count > 0
-        })
+        documents.append(
+            {
+                "name": doc.Name,
+                "path": doc.FullName,
+                "has_vba": doc.VBProject.VBComponents.Count > 0,
+            }
+        )
     return documents
