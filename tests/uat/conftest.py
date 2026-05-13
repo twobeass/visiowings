@@ -28,6 +28,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# The UAT test modules import ``winreg`` / ``pywin32`` at top level. On
+# non-Windows runners (Linux/macOS CI) even *collecting* them raises
+# ``ModuleNotFoundError: winreg``, so we short-circuit collection at the
+# conftest level instead of relying on per-test skips.
+collect_ignore_glob = ["test_*.py"] if sys.platform != "win32" else []
+
 from tests.uat import markers as _markers  # noqa: E402
 from tests.uat.com_helpers.process import kill_zombies  # noqa: E402
 
