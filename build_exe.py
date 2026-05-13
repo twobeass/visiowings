@@ -2,7 +2,7 @@ import PyInstaller.__main__
 
 PyInstaller.__main__.run(
     [
-        "visiowings/cli.py",
+        "pyinstaller_entry.py",
         "--onefile",
         "--name=visiowings",
         "--console",
