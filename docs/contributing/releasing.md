@@ -32,6 +32,30 @@ need to merge pull requests; the rest is handled by GitHub Actions.
 The whole pipeline is idempotent and re-runnable through
 `workflow_dispatch`.
 
+### One-time setup: `RELEASE_PLEASE_TOKEN`
+
+`release-please` opens its Release PR from inside the workflow. Doing so
+with the default `GITHUB_TOKEN` requires the global org/repo setting
+*"Allow GitHub Actions to create and approve pull requests"*, which also
+lets every other workflow approve its own PRs. To keep that capability
+scoped to this single workflow we use a fine-grained PAT instead.
+
+Create it once:
+
+1. <https://github.com/settings/personal-access-tokens/new> — choose
+   **fine-grained PAT**, give it a name like `visiowings-release-please`.
+2. Repository access: **only this repository (`visiowings`)**.
+3. Permissions (Repository):
+   - **Contents** → *Read and write* (push branches + tags)
+   - **Pull requests** → *Read and write* (open the Release PR)
+4. Set an expiry of 12 months (or your org's policy) and copy the token.
+5. Add it to the repo as a secret:
+   `Settings → Secrets and variables → Actions → New repository secret`
+   → name `RELEASE_PLEASE_TOKEN`, value = the PAT.
+
+The workflow then runs as the PAT owner instead of `github-actions[bot]`,
+so the Release PR is attributed to that user.
+
 ## Verifying a release
 
 Every release artefact can be verified offline by anyone — no maintainer

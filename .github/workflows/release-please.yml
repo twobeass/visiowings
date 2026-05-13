@@ -24,6 +24,17 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # We deliberately do NOT use the workflow-default GITHUB_TOKEN here:
+          # opening / approving pull requests from inside a workflow requires
+          # the org/repo setting "Allow GitHub Actions to create and approve
+          # pull requests" — a global toggle that also lets *any* workflow
+          # approve its own PRs. A scoped PAT (or a GitHub App) keeps that
+          # capability narrow to this single workflow.
+          #
+          # Required token scopes (fine-grained PAT, single-repo):
+          #   - Contents: Read and write          (push branches, tags)
+          #   - Pull requests: Read and write     (open the Release PR)
+          # Stored as the repo secret RELEASE_PLEASE_TOKEN.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
