@@ -22,4 +22,4 @@ Earlier history is preserved in the Git log.
 - Auto-detection of locale codepage (cp1252, cp1251, cp1250, cp932, cp936,
   cp949, cp950, …).
 
-[0.6.1]: https://github.com/twobeass/visiowings/releases/tag/v0.6.1
+[0.6.1]: https://github.com/twobeass/visiowings/releases/tag/0.6.1
