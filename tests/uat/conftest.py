@@ -37,6 +37,39 @@ collect_ignore_glob = ["test_*.py"] if sys.platform != "win32" else []
 from tests.uat import markers as _markers  # noqa: E402
 from tests.uat.com_helpers.process import kill_zombies  # noqa: E402
 
+_PYWIN32_MODULE_NAMES = ("win32com.client", "win32com", "pythoncom", "pywintypes")
+
+
+@pytest.fixture(autouse=True)
+def _restore_real_pywin32():
+    """Drop the parent conftest's MagicMock stubs for the duration of each UAT test.
+
+    The repo-wide ``tests/conftest.py`` installs ``MagicMock`` stand-ins for
+    ``win32com`` / ``pythoncom`` / ``pywintypes`` so unit tests can run on
+    Linux. The UAT suite needs the real COM bindings; we pop the stubs
+    around each test and reinstate them afterwards so subsequent unit
+    tests still see the mocks they expect.
+    """
+    if sys.platform != "win32":
+        yield
+        return
+    saved: dict[str, object] = {}
+    for name in _PYWIN32_MODULE_NAMES:
+        if name in sys.modules:
+            saved[name] = sys.modules.pop(name)
+    try:
+        yield
+    finally:
+        # Drop any real pywin32 module that got imported during this test,
+        # then put the stubs back. Order matters: pop real modules first so
+        # ``sys.modules[name] = stub`` is a clean replacement.
+        for name in _PYWIN32_MODULE_NAMES:
+            if name not in saved:
+                sys.modules.pop(name, None)
+        for name, stub in saved.items():
+            sys.modules[name] = stub
+
+
 # ---------------------------------------------------------------------------
 # pytest hooks
 # ---------------------------------------------------------------------------
