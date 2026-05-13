@@ -500,6 +500,7 @@ def _require_user_opened_visio(required_doc_name: str = "sample.vsdm"):
             "  This usually means Visio is starting up or the ROT entry\n"
             f"  isn't ready yet. Open '{required_doc_name}' in Visio and re-run."
         )
+        return None  # unreachable: pytest.skip raises Skipped; here for CodeQL flow
 
     docs = [d.Name for d in app.Documents]
     if not any(d.lower() == required_doc_name.lower() for d in docs):
